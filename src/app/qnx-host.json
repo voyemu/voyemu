@@ -272,6 +272,10 @@
         "before": "a9646f884187452927daca2eff09d2222dd4c05c82f852a4182a84683325236e",
         "after": "c65e371ede0b140c5b3f93c868117a37667bc85c01cc2fc21d55e7e7195f2854"
       },
+      "configure": {
+        "before": "b430cf9275cf53933807f9a63e8487b411c56925bb981e5032e56b352fe107d5",
+        "after": "00b8c092b276fc65a1db7cd84e1d17844276a5634be4a09dbbbaddd145757506"
+      },
       "include/system/memory.h": {
         "before": "e18ae2d127d0e427de130a63f6437ed37b17d7d54c873c46007866064c958261",
         "after": "c363326f5ece37fbbdeac9c7b265e99d56a11c711a42d60f118dc02bdde48d9d"

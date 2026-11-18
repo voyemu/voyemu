@@ -345,9 +345,11 @@ Json install_qnx_host_windows_source(const std::filesystem::path &root, bool off
         std::filesystem::rename(payload, boot);
     }
 
+    const auto source_key =
+            sha256_bytes(recipe.at("source").dump() + recipe.at("patched_sources").dump());
     const auto msys = boot / "msys64", bash = msys / "usr/bin/bash.exe",
                zig = boot / "zig-x86_64-windows-0.15.2/zig.exe",
-               sources = cache / "windows-source-11.1.2";
+               sources = cache / ("win-src-" + source_key.substr(0, 12));
     // Zig keeps its cache in the build stage instead of the user profile.
     const auto zig_cache = (stage / "zig-cache").string();
     std::map<std::string, std::string> env{{"MSYSTEM", "MSYS"},

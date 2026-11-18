@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
         check(real_recipe.at("version") == "11.1.2" && real_recipe.at("build_tools").size() == 6 &&
                       real_recipe.at("dependencies").size() == 6 &&
                       real_recipe.at("python_wheels").size() == 4 &&
-                      real_recipe.at("patched_sources").size() == 8,
+                      real_recipe.at("patched_sources").size() == 9,
               "embedded pinned MSYS/Zig/QEMU recipe closure");
         {
             const std::filesystem::path source_msys = "/msys";

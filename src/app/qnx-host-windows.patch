@@ -186,3 +186,16 @@
      return qemu_fdatasync(fd);
  }
  
+--- a/configure
++++ b/configure
+@@ -961,8 +961,4 @@
+-# for msys2
++# MSYS Python reads the Meson script using a POSIX path.
+ get_pwd() {
+-    if pwd -W >/dev/null 2>&1; then
+-        pwd -W
+-    else
+-        pwd
+-    fi
++    pwd -P
+ }
