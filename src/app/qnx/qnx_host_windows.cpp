@@ -480,6 +480,9 @@ Json install_qnx_host_windows_source(const std::filesystem::path &root, bool off
     configure += " --cross-prefix=x86_64-w64-mingw32- --cc=" + shell(posix(wrappers / "cc")) +
                  " --cxx=" + shell(posix(wrappers / "cxx")) +
                  " --python=" + shell(posix(msys / "usr/bin/python3.exe")) +
+                 // QEMU finds system libfdt by cc.find_library, not pkg-config.
+                 " --extra-cflags=" + shell("-I" + (fdtdst / "include").generic_string()) +
+                 " --extra-ldflags=" + shell("-L" + (fdtdst / "lib").generic_string()) +
                  " --extra-cflags=" + shell("-I" + (msys / "ucrt64/include").generic_string()) +
                  " --extra-ldflags=" + shell("-L" + (msys / "ucrt64/lib").generic_string());
     script(configure, build, 300000);
