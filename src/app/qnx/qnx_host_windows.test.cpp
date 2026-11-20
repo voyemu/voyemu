@@ -147,7 +147,7 @@ void build_installed(const std::filesystem::path &directory, const Json &recipe,
 int main(int argc, char **argv) {
     try {
         const auto &real_recipe = qnx_host_catalog().at("windows_file_backend");
-        check(real_recipe.at("version") == "11.1.2" && real_recipe.at("build_tools").size() == 6 &&
+        check(real_recipe.at("version") == "11.1.2" && real_recipe.at("build_tools").size() == 7 &&
                       real_recipe.at("dependencies").size() == 6 &&
                       real_recipe.at("python_wheels").size() == 4 &&
                       real_recipe.at("patched_sources").size() == 9,

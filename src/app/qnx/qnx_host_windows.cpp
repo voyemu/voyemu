@@ -388,7 +388,7 @@ Json install_qnx_host_windows_source(const std::filesystem::path &root, bool off
 
         return run(bash, {"--noprofile", "--norc", posix(file)}, cwd, env, timeout);
     };
-    script("python3 -c 'import venv,ensurepip,pyexpat; import sys; assert sys.version_info >= (3,9)'\nninja --version\npkgconf --version\npatch --version",
+    script("python3 -c 'import venv,ensurepip,pyexpat; import sys; assert sys.version_info >= (3,9)'\nninja --version\npkgconf --version\npatch --version\ndiff --version",
            stage);
 
     if (!std::filesystem::exists(sources)) {

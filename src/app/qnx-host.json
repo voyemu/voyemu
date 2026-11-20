@@ -472,6 +472,10 @@
       "patch": {
         "url": "https://mirror.msys2.org/msys/x86_64/patch-2.8-2-x86_64.pkg.tar.zst",
         "sha256": "df34ebf345d607cabf0b2cbad60f562f775f07985647b84035b40702f62ee9b1"
+      },
+      "diffutils": {
+        "url": "https://mirror.msys2.org/msys/x86_64/diffutils-3.12-1-x86_64.pkg.tar.zst",
+        "sha256": "7902c8ce3d4dd69a0f5e98dc9d5c83c17b23314ba486169db57ef6e2835ce3b6"
       }
     }
   }
