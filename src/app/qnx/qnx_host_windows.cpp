@@ -186,13 +186,22 @@ Json install_qnx_host_windows_source(const std::filesystem::path &root, bool off
         spec.directory = cwd;
         spec.environment = std::move(env);
         spec.output = stage / (std::to_string(++step) + ".log");
+        const auto failed = "source step " + std::to_string(step) + " failed";
+        const auto diagnostics = "; diagnostics: " + cleanup.logs().string();
 
         if (timeout <= 300000 && output_limit <= 1024 * 1024) {
-            const auto response = execute(spec, timeout, output_limit);
+            ProcessResult response{};
+
+            try {
+                response = execute(spec, timeout, output_limit);
+            } catch (const VoyemuError &error) {
+                const auto code = std::string(error.code());
+                const auto reason = std::string(error.what()).substr(code.size() + 2);
+                throw VoyemuError(code.c_str(), failed + ": " + reason + diagnostics);
+            }
+
             save(spec.output, response.output);
-            require(!response.timed_out && response.exit_code == 0,
-                    "source step " + std::to_string(step) +
-                            " failed; diagnostics: " + cleanup.logs().string());
+            require(!response.timed_out && response.exit_code == 0, failed + diagnostics);
 
             return response.output;
         }
@@ -201,18 +210,18 @@ Json install_qnx_host_windows_source(const std::filesystem::path &root, bool off
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
 
         while (child.alive()) {
-            require(std::chrono::steady_clock::now() < deadline, "source build deadline exceeded");
+            require(std::chrono::steady_clock::now() < deadline,
+                    failed + ": deadline exceeded" + diagnostics);
             require(std::filesystem::space(root).available >= reserve,
-                    "source build disk reserve reached");
+                    failed + ": disk reserve reached" + diagnostics);
             require(!std::filesystem::exists(spec.output) ||
                             std::filesystem::file_size(spec.output) <
                                     (output_limit > 1024 * 1024 ? output_limit : 16ULL << 20),
-                    "source build output exceeds bound");
+                    failed + ": output exceeds bound" + diagnostics);
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
-        require(child.exit_code() == 0,
-                "source build failed; diagnostics: " + cleanup.logs().string());
+        require(child.exit_code() == 0, failed + diagnostics);
 
         if (output_limit > 1024 * 1024) {
             require(std::filesystem::file_size(spec.output) < output_limit,
@@ -485,7 +494,8 @@ Json install_qnx_host_windows_source(const std::filesystem::path &root, bool off
                  " --extra-ldflags=" + shell("-L" + (fdtdst / "lib").generic_string()) +
                  " --extra-cflags=" + shell("-I" + (msys / "ucrt64/include").generic_string()) +
                  " --extra-ldflags=" + shell("-L" + (msys / "ucrt64/lib").generic_string());
-    script(configure, build, 300000);
+    // A timeout above 300 s streams to the step log; Meson prints its whole log on CI failures.
+    script(configure, build, 600000);
     script("cd " + shell(posix(build)) + "\nninja -j3 qemu-system-aarch64.exe", build, 3600000);
     const auto exe = build / "qemu-system-aarch64.exe", payload = stage / "payload";
     ensure_private_directory(payload);

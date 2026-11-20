@@ -189,7 +189,7 @@ jobs:
               uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               with:
                   name: qnx-host-windows-x64-${{ matrix.copy }}-diagnostics
-                  path: ${{ env.QNX_BUILD_ROOT }}/.local/build/qnx-windows-source-*/*.log
+                  path: ${{ env.QNX_BUILD_ROOT }}/.local/build/qnx-windows-source-*/*
                   if-no-files-found: ignore
                   retention-days: 7
             # The macOS recipe uses the compiler and Python of the runner, the Linux recipe its Python and make;
