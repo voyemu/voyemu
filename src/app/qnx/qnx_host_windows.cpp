@@ -464,8 +464,12 @@ Json install_qnx_host_windows_source(const std::filesystem::path &root, bool off
                         "  set -- \"$@\" \"$a\"\n"
                         "done\n") +
             "MSYS2_ARG_CONV_EXCL='' exec " + z;
-    wrapper("cc", zig_command + " cc -target x86_64-windows-gnu -UNDEBUG \"$@\"");
-    wrapper("cxx", zig_command + " c++ -target x86_64-windows-gnu -UNDEBUG \"$@\"");
+    // Zig emits CodeView and a PDB signature by default and lld stamps the link time; stripping,
+    // /Brepro and the prefix map make the engine independent of the build time and root.
+    const auto flags = " -target x86_64-windows-gnu -UNDEBUG -s -Wl,-Brepro -ffile-prefix-map=" +
+                       shell(root.generic_string() + "=.") + " \"$@\"";
+    wrapper("cc", zig_command + " cc" + flags);
+    wrapper("cxx", zig_command + " c++" + flags);
     wrapper("ar", zig_command + " ar \"$@\"");
     // The rc adapter answers the meson windres detection
     // probe (single '/?' argument) so configure detects a windows resource compiler.

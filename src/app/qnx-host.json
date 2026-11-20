@@ -365,6 +365,7 @@
       "--disable-guest-agent",
       "--disable-plugins",
       "--disable-werror",
+      "--disable-debug-info",
       "--without-default-features",
       "--enable-tcg",
       "--enable-fdt=system"
