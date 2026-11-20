@@ -502,11 +502,13 @@ Json install_qnx_host_windows_source(const std::filesystem::path &root, bool off
                  // directory, including the native-only generator of target/hexagon.
                  " --host-cc=" + shell(posix(wrappers / "cc")) +
                  " --python=" + shell(posix(msys / "usr/bin/python3.exe")) +
-                 // QEMU finds system libfdt by cc.find_library, not pkg-config.
-                 " --extra-cflags=" + shell("-I" + (fdtdst / "include").generic_string()) +
-                 " --extra-ldflags=" + shell("-L" + (fdtdst / "lib").generic_string()) +
-                 " --extra-cflags=" + shell("-I" + (msys / "ucrt64/include").generic_string()) +
-                 " --extra-ldflags=" + shell("-L" + (msys / "ucrt64/lib").generic_string());
+                 // QEMU finds system libfdt by cc.find_library, not pkg-config. MSYS Meson resolves
+                 // -l against -L for Ninja dependencies and needs POSIX paths; the Zig wrapper
+                 // converts them back.
+                 " --extra-cflags=" + shell("-I" + posix(fdtdst / "include")) +
+                 " --extra-ldflags=" + shell("-L" + posix(fdtdst / "lib")) +
+                 " --extra-cflags=" + shell("-I" + posix(msys / "ucrt64/include")) +
+                 " --extra-ldflags=" + shell("-L" + posix(msys / "ucrt64/lib"));
     // QEMU's Meson postconf script links qemu-bundle to install sources that the build creates
     // later. The MSYS default copies the target and native links need it to exist; system-file
     // links may dangle. Ninja reruns that script when it regenerates the build.
