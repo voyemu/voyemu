@@ -498,6 +498,9 @@ Json install_qnx_host_windows_source(const std::filesystem::path &root, bool off
 
     configure += " --cross-prefix=x86_64-w64-mingw32- --cc=" + shell(posix(wrappers / "cc")) +
                  " --cxx=" + shell(posix(wrappers / "cxx")) +
+                 // --cross-prefix makes Meson require a build machine compiler for every target
+                 // directory, including the native-only generator of target/hexagon.
+                 " --host-cc=" + shell(posix(wrappers / "cc")) +
                  " --python=" + shell(posix(msys / "usr/bin/python3.exe")) +
                  // QEMU finds system libfdt by cc.find_library, not pkg-config.
                  " --extra-cflags=" + shell("-I" + (fdtdst / "include").generic_string()) +
