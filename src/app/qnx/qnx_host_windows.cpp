@@ -507,6 +507,10 @@ Json install_qnx_host_windows_source(const std::filesystem::path &root, bool off
                  " --extra-ldflags=" + shell("-L" + (fdtdst / "lib").generic_string()) +
                  " --extra-cflags=" + shell("-I" + (msys / "ucrt64/include").generic_string()) +
                  " --extra-ldflags=" + shell("-L" + (msys / "ucrt64/lib").generic_string());
+    // QEMU's Meson postconf script links qemu-bundle to install sources that the build creates
+    // later. The MSYS default copies the target and native links need it to exist; system-file
+    // links may dangle. Ninja reruns that script when it regenerates the build.
+    env["MSYS"] = "winsymlinks:sys";
     // A timeout above 300 s streams to the step log; Meson prints its whole log on CI failures.
     script(configure, build, 600000);
     script("cd " + shell(posix(build)) + "\nninja -j3 qemu-system-aarch64.exe", build, 3600000);
