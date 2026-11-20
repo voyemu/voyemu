@@ -449,7 +449,21 @@ Json install_qnx_host_windows_source(const std::filesystem::path &root, bool off
                 "build wrapper exec bit failed: " + name);
     };
     // MSYS Python and Ninja need POSIX paths. Convert arguments only at the native Zig boundary.
-    const auto zig_command = "MSYS2_ARG_CONV_EXCL='' exec " + z;
+    // MSYS converts argv but not Meson response files, so the wrapper rewrites each @file into a
+    // copy whose absolute POSIX paths, alone or after -L or -I, use the Windows form.
+    const auto zig_command =
+            std::string("for a do\n"
+                        "  shift\n"
+                        "  if [ \"${a#@}\" != \"$a\" ] && [ -f \"${a#@}\" ]; then\n"
+                        "    root=$(cygpath -m / | sed 's#/$##')\n"
+                        "    sed -E -e \"s#(^|[ '])(-[LI])?/([a-zA-Z])/#\\1\\2\\3:/#g\" "
+                        "-e \"s#(^|[ '])(-[LI])?/([^ '/])#\\1\\2$root/\\3#g\" "
+                        "\"${a#@}\" >\"${a#@}.win\"\n"
+                        "    a=\"$a.win\"\n"
+                        "  fi\n"
+                        "  set -- \"$@\" \"$a\"\n"
+                        "done\n") +
+            "MSYS2_ARG_CONV_EXCL='' exec " + z;
     wrapper("cc", zig_command + " cc -target x86_64-windows-gnu -UNDEBUG \"$@\"");
     wrapper("cxx", zig_command + " c++ -target x86_64-windows-gnu -UNDEBUG \"$@\"");
     wrapper("ar", zig_command + " ar \"$@\"");
