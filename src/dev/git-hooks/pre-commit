@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+git diff --cached --check
+
+work_parent=.local/build/jobs
+mkdir -p "$work_parent"
+work=$(mktemp -d "$work_parent/pre-commit.XXXXXXXX")
+trap 'rm -rf -- "$work"' EXIT
+
+git diff --cached --name-only --no-renames --diff-filter=ACMT -z > "$work/paths"
+snapshot="$work/staged"
+while IFS= read -r -d '' path; do
+    case "$path" in
+        *.c|*.h|*.cpp|*.hpp|*.mm|*.inc|*.java) ;;
+        *) continue ;;
+    esac
+
+    case "$path" in
+        *';'*|*$'\n'*)
+            printf 'pre-commit: formatter cannot handle staged path %q\n' "$path" >&2
+            exit 1 ;;
+    esac
+
+    destination="$snapshot/$path"
+    mkdir -p "${destination%/*}"
+    git cat-file blob ":$path" > "$destination"
+done < "$work/paths"
+
+if [[ -d "$snapshot" ]] &&
+    ! cmake -DVOYEMU_FORMAT_MODE=check "-DVOYEMU_FORMAT_STAGED_DIRECTORY=$snapshot" \
+        -P src/dev/format/format.cmake; then
+    printf '%s\n' 'pre-commit: staged formatting check failed; inspect the diagnostics and stage the corrected files' >&2
+    exit 1
+fi
