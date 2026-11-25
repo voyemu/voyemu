@@ -24,7 +24,13 @@ ctest --test-dir .local/build/linux --output-on-failure
 
 ## Checks before commit
 
-Run `lint-fix` before every commit: it applies the automatic fixes of clang-format, google-java-format and clang-tidy, then runs `lint`, the same checks as CI. Fix every remaining finding; suppress a finding only with a comment that gives the reason. Each check needs its pinned tools from `optionalTools` in `src/app/toolchain.json`; see [checks](docs/dev/checks.md).
+Enable the repository hook once per clone. It checks staged whitespace, source formatting and Checkstyle using the pinned tools. It reads the staged bytes without changing the index or working files.
+
+```sh
+git config --local core.hooksPath src/dev/git-hooks
+```
+
+Run `lint-fix` before every commit: it applies the automatic fixes of clang-format, google-java-format and clang-tidy, then runs `lint`, the same checks as CI. Fix every remaining finding; suppress a finding only with a comment that gives the reason. Run it in a worktree containing only your changes because it formats the whole tree. Each check needs its pinned tools from `optionalTools` in `src/app/toolchain.json`; see [checks](docs/dev/checks.md).
 
 ```sh
 cmake --build .local/build/linux --target lint-fix
@@ -54,5 +60,7 @@ Use exact dependency versions, the latest release unless a reason is recorded. P
 [docs/](docs/index.md) is canonical. Every docs page and the root README, CONTRIBUTING, SECURITY and CHANGELOG are pairs `X.md`/`X.ru.md`; edit both by meaning. Use the terms of the [glossary](docs/GLOSSARY.md), make every docs page reachable by links from [docs/index.md](docs/index.md) in reading order, the order in which the Voyemu website publishes the pages, and make `java src/dev/checks/CheckDocs.java .` pass.
 
 ## Pull requests
+
+Merging a pull request or pushing directly to `main` requires a successful `Lint (Linux x64, Zig)` check from GitHub Actions on the change. For a direct push, first run the `ci` workflow on a branch with the same commit.
 
 One pull request serves one purpose. Its description names the checks run, the checks skipped and why. OEM files, machine disks, tokens and other secrets are never attached.

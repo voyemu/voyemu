@@ -53,6 +53,19 @@ foreach(input IN LISTS inputs)
         list(APPEND failures "${input}: check mode rejected the formatted fixture:\n${voyemu_format_output}")
     endif()
 endforeach()
+# The staged mode checks project paths and applies the same source exclusions.
+file(REMOVE_RECURSE "${WORK}")
+file(MAKE_DIRECTORY "${WORK}/src/app" "${WORK}/src/app/third_party" "${WORK}/src/dev/format/test")
+file(COPY_FILE "${fixtures}/blank-lines.formatted.cpp" "${WORK}/src/app/with space.cpp")
+file(COPY "${fixtures}/blank-lines.cpp" DESTINATION "${WORK}/src/app/third_party")
+file(COPY "${fixtures}/blank-lines.cpp" DESTINATION "${WORK}/src/dev/format/test")
+execute_process(COMMAND "${CMAKE_COMMAND}" -DVOYEMU_FORMAT_MODE=check "-DVOYEMU_FORMAT_STAGED_DIRECTORY=${WORK}"
+                        "-DVOYEMU_CLANG_FORMAT=${VOYEMU_CLANG_FORMAT}" "-DVOYEMU_GOOGLE_JAVA_FORMAT=${VOYEMU_GOOGLE_JAVA_FORMAT}" "-DVOYEMU_UNCRUSTIFY=${VOYEMU_UNCRUSTIFY}"
+                        -P "${format_script}"
+                OUTPUT_VARIABLE staged_output ERROR_VARIABLE staged_output RESULT_VARIABLE staged_code)
+if(NOT staged_code EQUAL 0 OR NOT staged_output MATCHES "passed for 1 C/C[+][+] and 0 Java files")
+    list(APPEND failures "staged check did not select one formatted source:\n${staged_output}")
+endif()
 file(REMOVE_RECURSE "${WORK}")
 if(failures)
     string(JOIN "\n" text ${failures})
