@@ -22,12 +22,11 @@ inline std::string passion_prepared_guest_abi(const Json &definition, const Json
                  candidate.contains("signed_android"),
          "x86_64 requires the signed API30 guest with hardware acceleration");
     const auto &proof = candidate.at("signed_android");
-    need(proof.is_object() && proof.size() == 10 &&
+    need(proof.is_object() && proof.size() == 6 &&
                  proof.at("base_archive_sha256") == base.at("sha256"),
          "signed guest source differs");
 
-    for (const auto *name : {"manifest_sha256", "signature_sha256", "public_key_sha256",
-                             "spki_sha256", "vbmeta_digest", "system_root_sha256"}) {
+    for (const auto *name : {"vbmeta_digest", "system_root_sha256"}) {
         need(sha256_text(proof.at(name).get<std::string>()), "signed guest pin required");
     }
 
@@ -36,8 +35,8 @@ inline std::string passion_prepared_guest_abi(const Json &definition, const Json
     need(android_boot_id_valid(first) && android_boot_id_valid(cold) && first != cold,
          "two distinct signed boots required");
 
-    // Release signature and SDK file contents are checked by the signed image verifier.
-    // Bind the capability to the same installed images and successful live verification.
+    // The signed image verifier checked the release; bind the capability to the same installed
+    // images and successful live verification.
     for (const auto *name : {"system.img", "vendor.img"}) {
         const auto &signed_file = proof.at("files").at(name);
         const auto &image = candidate.at("android").at("images").at(name);

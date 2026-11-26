@@ -23,10 +23,6 @@ inline void use_signed_x86_guest(Json &definition, Json &candidate) {
     candidate["signed_android"] = {{"base_archive_sha256", definition.at("android").at("sha256")},
                                    {"first_boot_id", "6712c071-a649-43a9-8bab-81d440fe323b"},
                                    {"cold_boot_id", "e8c38b50-aa59-4703-9525-b1ecdab800e7"},
-                                   {"manifest_sha256", std::string(64, '1')},
-                                   {"signature_sha256", std::string(64, '2')},
-                                   {"public_key_sha256", std::string(64, '3')},
-                                   {"spki_sha256", std::string(64, '4')},
                                    {"vbmeta_digest", vbmeta},
                                    {"system_root_sha256", root},
                                    {"files", files}};

@@ -72,49 +72,6 @@ int main(int argc, char **argv) {
             return std::regex_search(output, std::regex(R"((^|\n)[a-z][a-z_]*: )"));
         };
 
-        if (os::platform_name == "Linux") {
-            const auto der = project / "src/app/prepare/testdata/apk-signing/public-key.der";
-            const auto pem = root / "public.pem";
-            ProcessSpec export_key;
-            export_key.executable = "/usr/bin/openssl";
-            export_key.arguments = {"pkey",       "-pubin",  "-inform", "DER",       "-in",
-                                    der.string(), "-pubout", "-out",    pem.string()};
-            require(execute(export_key).exit_code == 0, "public fixture PEM export failed");
-            const auto pin = sha256_file(der);
-            const auto trust = root / ".local/toolchains/avd-image-tools/trust";
-            const auto registered = trust / pin / "public.pem";
-            const auto import_key = [&](const std::filesystem::path &key,
-                                        const std::string &expected) {
-                ProcessSpec spec;
-                spec.executable = installed;
-                spec.arguments = {"trust-android-key",
-                                  "--android-public-key",
-                                  key.string(),
-                                  "--android-public-key-sha256",
-                                  expected,
-                                  "--lang=en"};
-                spec.directory = root;
-
-                return execute(spec, 10000);
-            };
-            const auto wrong = import_key(pem, std::string(64, '0'));
-            require(!wrong.timed_out && wrong.exit_code != 0 &&
-                            wrong.output.find("SIGNED_ANDROID") != std::string::npos &&
-                            !std::filesystem::exists(trust),
-                    "unverified public key created a host trust record: " + wrong.output);
-            const auto accepted = import_key(pem, pin);
-            require(!accepted.timed_out && accepted.exit_code == 0 &&
-                            accepted.output.find(pin) != std::string::npos &&
-                            sha256_file(registered) == sha256_file(pem),
-                    "explicit public key import failed: " + accepted.output);
-            require(import_key(pem, pin).exit_code == 0, "identical key import was not idempotent");
-            const auto original = sha256_file(registered);
-            std::ofstream(pem, std::ios::app | std::ios::binary) << '\n';
-            const auto different = import_key(pem, pin);
-            require(different.exit_code != 0 && sha256_file(registered) == original,
-                    "import changed exact bytes used by an existing signing receipt");
-        }
-
         const auto run_unknown = [&](const char *command) {
             ProcessSpec spec;
             spec.executable = installed;

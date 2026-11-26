@@ -137,7 +137,7 @@ Json activate_portable_runtime(const std::filesystem::path &root, std::string_vi
 
     const auto development_kernel = checked_development_kernel(seed, definition, manifest);
     const auto can_model_sha = checked_can_model_receipt(seed, manifest);
-    const auto clean_pins = checked_signed_android_boot_pins(root, seed, definition, manifest);
+    const auto clean_pins = checked_signed_android_boot_pins(seed, definition, manifest);
     const bool signed_system = manifest.at("android").contains("signed_android");
 
     for (const auto &[name, sha] : clean_pins) {

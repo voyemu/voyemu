@@ -52,16 +52,6 @@ Repeat `status` to watch Android boot. Stop the session when finished. The machi
 ./voyemu stop "$machine"
 ```
 
-### Run a signed image directly
-
-For a standalone Android development run, set `RELEASE` to the directory of a locally signed image and supply the trusted public key and its SHA-256 SPKI fingerprint independently. `run-image.sh` verifies the image and creates a fresh two-display AVD outside the Voyemu session lifecycle. It starts Android Emulator with KVM and host graphics on the current X display. The script uses `ss` to identify its private ADB listener. It needs an unused even console port and a new run directory beneath an existing directory. It prints the private ADB command and writes the boot log to `emulator.log` in that directory.
-
-```sh
-src/dev/avd/prepare-tools.sh
-src/dev/avd/run-image.sh "$RELEASE" "$PUBLIC_KEY" "$TRUSTED_SPKI_SHA256" \
-    "$RUN_DIR" 5584
-```
-
 ## OEM inputs
 
 Import the pinned firmware archive `OIB_8155_H53Y3632802AW.zip` from a local path. `fetch` reads the OTA package inside it and extracts the shared OEM inputs for both targets. The inner TGZ can also be supplied directly under the filename in the update manifest. The command verifies its byte count and SHA-256.

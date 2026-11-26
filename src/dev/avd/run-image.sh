@@ -2,17 +2,17 @@
 set -euo pipefail
 umask 077
 
-if [[ $# != 5 ]]; then
-    echo "Usage: $0 RELEASE TRUSTED_PUBLIC_PEM TRUSTED_SPKI_SHA256 NEW_RUN_DIR EVEN_EMULATOR_PORT" >&2
+if [[ $# != 4 ]]; then
+    echo "Usage: $0 RELEASE KEY_PEM NEW_RUN_DIR EVEN_EMULATOR_PORT" >&2
     exit 2
 fi
 
 here=$(cd -- "$(dirname -- "$0")" && pwd -P)
 repo=$(cd -- "$here/../../.." && pwd -P)
 release=$(realpath -e -- "$1")
-pub=$(realpath -e -- "$2")
-work=$(realpath -m -- "$4")
-port=$5
+key=$(realpath -e -- "$2")
+work=$(realpath -m -- "$3")
+port=$4
 if [[ ! "$port" =~ ^[0-9]{4}$ ]] || (( port < 5554 || port > 5682 || port % 2 != 0 )); then
     echo "Choose an unused even emulator console port from 5554 to 5682." >&2
     exit 2
@@ -37,7 +37,7 @@ for listener in "$port" "$((port + 1))" "$((port + 20000))"; do
 done
 [[ -n "${DISPLAY:-}" ]] || { echo "Set DISPLAY to a hardware-accelerated X server." >&2; exit 1; }
 
-"$here/verify-image.sh" "$release" "$pub" "$3"
+"$here/verify-image.sh" "$release" "$key"
 mkdir -m 700 -- "$work"
 mkdir -m 700 -- "$work/avd" "$work/avd/signed.avd" "$work/android" "$work/emulator" "$work/tmp"
 export ANDROID_SDK_ROOT="$sdk" ANDROID_HOME="$sdk"

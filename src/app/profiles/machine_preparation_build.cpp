@@ -13,17 +13,6 @@ std::filesystem::path signed_android_tools(const std::filesystem::path &root) {
     return std::filesystem::is_directory(installed) ? installed : root / "src/dev/avd";
 }
 
-static constexpr std::size_t signed_android_public_key_limit = 8192;
-
-static std::filesystem::path signed_android_host_key(const std::filesystem::path &root,
-                                                     const std::string &spki) {
-    if (!sha256_text(spki)) {
-        throw VoyemuError("SIGNED_ANDROID", "expected SHA-256 public key SPKI pin");
-    }
-
-    return root / ".local/toolchains/avd-image-tools/trust" / spki / "public.pem";
-}
-
 namespace {
 constexpr Check require_signed_android{"SIGNED_ANDROID"};
 
@@ -43,119 +32,31 @@ std::string read_signed_android_metadata(const std::filesystem::path &file, std:
 
     return bytes;
 }
-
-std::string read_signed_android_public_key(const std::filesystem::path &file) {
-    const auto bytes = read_signed_android_metadata(file, signed_android_public_key_limit);
-    auto pem = std::string_view(bytes);
-    constexpr std::string_view begin = "-----BEGIN PUBLIC KEY-----",
-                               end = "-----END PUBLIC KEY-----";
-
-    pem = pem.substr(0, pem.find_last_not_of(" \r\n\t") + 1);
-    require_signed_android(pem.size() > begin.size() + end.size() && pem.starts_with(begin) &&
-                                   pem.ends_with(end),
-                           "one public key PEM block required");
-    const auto body = pem.substr(begin.size(), pem.size() - begin.size() - end.size());
-    require_signed_android(
-            body.find_first_not_of(
-                    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/= \r\n\t") ==
-                    body.npos,
-            "public key PEM contains unexpected data");
-
-    return bytes;
-}
-
-struct StagedAndroidPublicKey {
-    std::filesystem::path file;
-
-    ~StagedAndroidPublicKey() {
-        if (!file.empty()) {
-            std::error_code error;
-            std::filesystem::remove(file, error);
-        }
-    }
-
-    void stage(const std::filesystem::path &root, std::string_view bytes) {
-        const auto directory = root / ".local/toolchains/avd-image-tools";
-        ordinary(directory);
-        ensure_private_directory(directory);
-        const auto pending = directory / (".android-public-" + random_token() + ".pem");
-        os::ExclusiveFile output(pending);
-        require_signed_android(output.open(), "could not stage public key");
-        file = pending;
-        require_signed_android(output.write(bytes.data(), bytes.size()) && output.sync() &&
-                                       output.close(),
-                               "could not write staged public key");
-    }
-};
-
-std::string publish_verified_android_key(const std::filesystem::path &host_key,
-                                         const StagedAndroidPublicKey &staged,
-                                         std::string_view bytes) {
-    ordinary(host_key);
-    ensure_private_directory(host_key.parent_path());
-
-    if (!std::filesystem::exists(host_key) && !os::rename_exclusive(staged.file, host_key)) {
-        require_signed_android(std::filesystem::exists(host_key),
-                               "could not publish trusted public key");
-    }
-
-    const auto hash = sha256_bytes(bytes);
-    check_file(host_key, hash, signed_android_public_key_limit);
-
-    return hash;
-}
 } // namespace
 
-void trust_signed_android_key(const std::filesystem::path &root, const std::filesystem::path &key,
-                              const std::string &spki_sha256) {
-    require_signed_android(os::platform_name == "Linux", "signed Android trust requires Linux");
-    const auto host_key = signed_android_host_key(root, spki_sha256);
-    const auto bytes = read_signed_android_public_key(key);
-    StagedAndroidPublicKey staged;
-    staged.stage(root, bytes);
-    ProcessSpec spec;
-    spec.executable = "/usr/bin/openssl";
-    spec.directory = root;
-    spec.arguments = {"pkey", "-pubin", "-in", staged.file.string(), "-pubout", "-outform", "DER"};
-    const auto result = execute(spec, 10000, signed_android_public_key_limit);
-    require_signed_android(!result.timed_out && result.exit_code == 0 &&
-                                   sha256_bytes(result.output) == spki_sha256,
-                           "public key does not match the independent SHA-256 SPKI pin");
-    (void)publish_verified_android_key(host_key, staged, bytes);
-}
-
-Json verify_signed_android_input(const std::filesystem::path &root, const SignedAndroidInput &input,
-                                 const Json &profile) {
+Json verify_signed_android_release(const std::filesystem::path &root,
+                                   const std::filesystem::path &release,
+                                   const std::filesystem::path &key, const Json &profile) {
     const auto require = require_signed_android;
     const auto read = read_signed_android_metadata;
 
-    require(os::host_signed_android_preparation, "signed Android preparation requires Linux");
     const auto &base = profile.at("android");
     const auto identity = native_base_identity(base);
+
     require(identity.api == 30 && identity.abi == "x86_64" && profile_signed_preparation(profile),
             "signed Android release requires an API30 x86_64 signed-offline target");
-    const auto release = input.release;
-    const auto key = input.public_key;
     ordinary(release);
     ordinary(key);
     require(release.is_absolute() && key.is_absolute() && std::filesystem::is_directory(release) &&
-                    std::filesystem::is_regular_file(key) && !inside(key, release) &&
-                    sha256_text(input.spki_sha256),
-            "ordinary release and independently pinned public key required");
-    const auto manifest = release / "manifest.sha256";
-    const auto signature = release / "manifest.sig";
+                    std::filesystem::is_regular_file(key) && !inside(key, release),
+            "ordinary release and separate signing key required");
     const auto verifier = signed_android_tools(root) / "verify-image.sh";
-
-    const auto manifest_bytes = read(manifest, 32 * 1024), signature_bytes = read(signature, 4096),
-               key_bytes = read_signed_android_public_key(key);
-    StagedAndroidPublicKey staged_key;
-    staged_key.stage(root, key_bytes);
     ordinary(verifier);
     require(std::filesystem::is_regular_file(verifier), "signed Android verifier required");
     ProcessSpec spec;
     spec.executable = verifier;
     spec.directory = root;
-    spec.arguments = {release.string(), staged_key.file.string(), input.spki_sha256};
+    spec.arguments = {release.string(), key.string()};
     const auto result = execute(spec, 180000, 32 * 1024);
 
     if (result.exit_code != 0 || result.timed_out) {
@@ -166,36 +67,24 @@ Json verify_signed_android_input(const std::filesystem::path &root, const Signed
     std::smatch system_root;
     require(std::regex_search(result.output, system_root, system_root_field),
             "verified system root missing");
-
-    require(read(manifest, 32 * 1024) == manifest_bytes &&
-                    read(signature, 4096) == signature_bytes &&
-                    read_signed_android_public_key(key) == key_bytes,
-            "manifest changed during verification");
+    // The machine pins the SDK files by SHA-256 like every other prepared base.
     Json files = Json::object();
-    std::string properties_sha;
-    std::istringstream lines(manifest_bytes);
+    const auto sdk = release / "sdk";
+    ordinary(sdk);
 
-    for (std::string line; std::getline(lines, line);) {
-        require(line.size() > 66 && sha256_text(std::string_view(line).substr(0, 64)) &&
-                        line.substr(64, 2) == "  ",
-                "invalid signed release manifest row");
-        const auto name = line.substr(66);
+    for (const auto &entry : std::filesystem::recursive_directory_iterator(sdk)) {
+        require(!entry.is_symlink() && (entry.is_directory() || entry.is_regular_file()),
+                "ordinary signed SDK files required");
 
-        if (name == "release.properties") {
-            require(properties_sha.empty(), "duplicate release metadata");
-            properties_sha = line.substr(0, 64);
-        } else if (name.starts_with("sdk/")) {
-            const auto item = name.substr(4);
-            relative(item);
-            const auto path = release / name;
-            ordinary(path);
-            require(!files.contains(item) && std::filesystem::is_regular_file(path) &&
-                            std::filesystem::file_size(path) > 0 &&
-                            std::filesystem::file_size(path) <= (8ULL << 30),
-                    "invalid signed SDK file");
-            files[item] = {{"sha256", line.substr(0, 64)},
-                           {"bytes", std::filesystem::file_size(path)}};
+        if (entry.is_directory()) {
+            continue;
         }
+
+        const auto item = entry.path().lexically_relative(sdk).generic_string();
+        relative(item);
+        const auto bytes = entry.file_size();
+        require(files.size() < 64 && bytes > 0 && bytes <= (8ULL << 30), "invalid signed SDK file");
+        files[item] = {{"sha256", sha256_file(entry.path())}, {"bytes", bytes}};
     }
 
     const auto properties = read(release / "release.properties", 4096);
@@ -204,11 +93,9 @@ Json verify_signed_android_input(const std::filesystem::path &root, const Signed
                std::string::npos;
     };
     const auto archive = base.at("sha256").get<std::string>();
-    require(sha256_bytes(properties) == properties_sha && property_present("format", "1") &&
-                    property_present("baseArchiveSha256", archive) &&
-                    property_present("publicKeySpkiSha256", input.spki_sha256),
-            "signed release does not match the source archive or trusted key");
-    require(files.size() > 0 && files.size() <= 64, "signed SDK inventory size differs");
+    require(property_present("format", "1") && property_present("baseArchiveSha256", archive),
+            "signed release does not match the source archive");
+    require(!files.empty(), "signed SDK inventory size differs");
     const std::string vbmeta = "VerifiedBootParams.textproto";
 
     for (const auto &[name, sha] : portable_clean_boot_pins(base)) {
@@ -225,22 +112,14 @@ Json verify_signed_android_input(const std::filesystem::path &root, const Signed
                     std::regex_search(metadata, match, digest_field),
             "verified boot parameters changed");
 
-    const auto key_pin = publish_verified_android_key(
-            signed_android_host_key(root, input.spki_sha256), staged_key, key_bytes);
-
-    return {{"manifest_sha256", sha256_bytes(manifest_bytes)},
-            {"signature_sha256", sha256_bytes(signature_bytes)},
-            {"public_key_sha256", key_pin},
-            {"spki_sha256", input.spki_sha256},
-            {"base_archive_sha256", archive},
+    return {{"base_archive_sha256", archive},
             {"vbmeta_digest", match[1].str()},
             {"system_root_sha256", system_root[1].str()},
             {"files", files}};
 }
 
 std::map<std::string, std::string>
-checked_signed_android_boot_pins(const std::filesystem::path &root,
-                                 const std::filesystem::path &seed, const Json &definition,
+checked_signed_android_boot_pins(const std::filesystem::path &seed, const Json &definition,
                                  const Json &manifest) {
     auto pins = portable_clean_boot_pins(definition.at("android"));
     const auto &android = manifest.at("android");
@@ -252,59 +131,29 @@ checked_signed_android_boot_pins(const std::filesystem::path &root,
         return pins;
     }
 
-    if (os::platform_name != "Linux") {
-        throw VoyemuError("SIGNED_ANDROID", "signed Android machines require Linux");
-    }
-
+    // runtime.json pins every signed input; the guest checks the vbmeta digest of its boot
+    // parameters and dm-verity checks the system blocks it reads.
     const auto &proof = android.at("signed_android");
     const auto &files = proof.at("files");
     const std::regex boot_id("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}");
     need(profile_signed_preparation(definition) && android.at("abi") == "x86_64" &&
                  android.at("api") == 30 && manifest.value("scope", std::string{}) == "android" &&
-                 !manifest.contains("qnx") && proof.size() == 10 && files.is_object() &&
+                 !manifest.contains("qnx") && proof.size() == 6 && files.is_object() &&
                  !files.empty() && files.size() <= 64 &&
                  proof.at("base_archive_sha256") == android.at("base_archive_sha256") &&
                  android.at("base_archive_sha256") == definition.at("android").at("sha256") &&
+                 sha256_text(proof.at("vbmeta_digest").get<std::string>()) &&
+                 sha256_text(proof.at("system_root_sha256").get<std::string>()) &&
                  std::regex_match(proof.at("first_boot_id").get<std::string>(), boot_id) &&
                  std::regex_match(proof.at("cold_boot_id").get<std::string>(), boot_id) &&
                  proof.at("first_boot_id") != proof.at("cold_boot_id"),
          "signed Android machine requires verified release and two distinct boot IDs");
-    const auto directory = seed / "android/signed-release";
-    const auto manifest_file = directory / "manifest.sha256",
-               signature_file = directory / "manifest.sig",
-               key_file = signed_android_host_key(root, proof.at("spki_sha256").get<std::string>());
-    const auto manifest_bytes = machine_preparation_detail::text(manifest_file, 32 * 1024);
-    check_file(manifest_file, proof.at("manifest_sha256").get<std::string>(), 32 * 1024);
-    need(sha256_bytes(manifest_bytes) == proof.at("manifest_sha256").get<std::string>(),
-         "signed manifest changed");
-    check_file(signature_file, proof.at("signature_sha256").get<std::string>(), 4096);
-    check_file(key_file, proof.at("public_key_sha256").get<std::string>(),
-               signed_android_public_key_limit);
-    const auto crypto = [&](std::vector<std::string> args) {
-        ProcessSpec spec;
-        spec.executable = "/usr/bin/openssl";
-        spec.directory = directory;
-        spec.arguments = std::move(args);
-        const auto result = execute(spec, 10000, 8192);
-        need(!result.timed_out && result.exit_code == 0,
-             "portable Android release signature could not be verified");
-
-        return result.output;
-    };
-    const auto spki =
-            crypto({"pkey", "-pubin", "-in", key_file.string(), "-pubout", "-outform", "DER"});
-    need(sha256_bytes(spki) == proof.at("spki_sha256").get<std::string>(),
-         "portable Android signing key differs");
-    crypto({"dgst", "-sha256", "-verify", key_file.string(), "-signature", signature_file.string(),
-            manifest_file.string()});
     const auto verify_role = [&](const std::string &name, const Json &descriptor) {
         const auto expected = files.at(name).at("sha256").get<std::string>();
-        need(descriptor.at("sha256").get<std::string>() == expected &&
+        need(sha256_text(expected) && descriptor.at("sha256").get<std::string>() == expected &&
                      descriptor.at("bytes") == files.at(name).at("bytes") &&
-                     descriptor.at("file") == "android/" + name &&
-                     ("\n" + manifest_bytes).find("\n" + expected + "  sdk/" + name + "\n") !=
-                             std::string::npos,
-             "immutable SDK input differs from its authenticated release");
+                     descriptor.at("file") == "android/" + name,
+             "immutable SDK input differs from its verified release");
 
         return expected;
     };
@@ -328,9 +177,8 @@ checked_signed_android_boot_pins(const std::filesystem::path &root,
     const auto metadata =
             machine_preparation_detail::text(seed / "android/VerifiedBootParams.textproto", 4096);
     const auto digest = proof.at("vbmeta_digest").get<std::string>();
-    need(std::regex_match(digest, std::regex("[0-9a-f]{64}")) &&
-                 metadata.find("\nparam: \"androidboot.vbmeta.digest=" + digest + "\"\n") !=
-                         std::string::npos,
+    need(metadata.find("\nparam: \"androidboot.vbmeta.digest=" + digest + "\"\n") !=
+                 std::string::npos,
          "portable Android boot digest differs");
 
     return pins;
@@ -1374,7 +1222,7 @@ Json build_android_candidate(const std::filesystem::path &root,
 
             candidate.events.push_back(
                     {{"phase", "signed-system-staged-offline"},
-                     {"manifest_sha256", request.signed_release.at("manifest_sha256")}});
+                     {"vbmeta_digest", request.signed_release.at("vbmeta_digest")}});
         } else if (!plan.at("system").empty()) {
             candidate.writable();
             // The system image grows by the bytes of the system entries.
@@ -1868,16 +1716,6 @@ Json build_android_candidate(const std::filesystem::path &root,
             copy_portable_image(candidate.machine / "base" / name,
                                 base_files.at(name).at("sha256").get<std::string>(),
                                 destination / "android" / name, reserve);
-            const auto source = request.signed_sdk.parent_path();
-            const auto proof = destination / "android/signed-release";
-            ensure_private_directory(proof);
-
-            for (const auto &part : {std::pair{"manifest.sha256", "manifest_sha256"},
-                                     std::pair{"manifest.sig", "signature_sha256"}}) {
-                copy_portable_image(source / part.first,
-                                    request.signed_release.at(part.second).get<std::string>(),
-                                    proof / part.first, reserve);
-            }
         }
 
         if (!development.is_null()) {

@@ -3,6 +3,7 @@
 #include "profile_build_internal.hpp"
 #include "profile_catalog.hpp"
 #include "qnx_guest_build.hpp"
+#include "signed_android.hpp"
 
 namespace voyemu {
 using namespace profile_build_detail;
@@ -25,7 +26,7 @@ std::filesystem::path signed_filesystem_recipe(const std::filesystem::path &root
 }
 
 struct SignedImageBuild {
-    std::filesystem::path stage, filesystems;
+    std::filesystem::path stage, filesystems, release, key;
 
     ~SignedImageBuild() {
         if (!stage.empty()) {
@@ -58,10 +59,10 @@ std::string run_signed_image_tool(const std::filesystem::path &directory,
     return result.output;
 }
 
-SignedAndroidInput build_signed_profile_image(const std::filesystem::path &root,
-                                              std::string_view profile, const Json &definition,
-                                              const ProfilePreparationArtifacts &artifacts,
-                                              bool offline, SignedImageBuild &build) {
+void build_signed_profile_image(const std::filesystem::path &root, std::string_view profile,
+                                const Json &definition,
+                                const ProfilePreparationArtifacts &artifacts, bool offline,
+                                SignedImageBuild &build) {
     if (!os::host_signed_android_preparation) {
         throw VoyemuError("SIGNED_ANDROID", "signed Android preparation requires Linux");
     }
@@ -114,7 +115,7 @@ SignedAndroidInput build_signed_profile_image(const std::filesystem::path &root,
 
     const auto authority = root / ".local/toolchains/avd-image-tools";
     const auto signing = authority / "local-development-signer";
-    const auto priv = signing / "private.pem", pub = signing / "public.pem";
+    const auto priv = signing / "private.pem";
     ensure_private_directory(authority);
     os::FileLock key_lock(authority / "signer.lock", true);
     need(key_lock.held(), "local Android signing authority is in use");
@@ -122,28 +123,19 @@ SignedAndroidInput build_signed_profile_image(const std::filesystem::path &root,
     if (!std::filesystem::exists(signing)) {
         const auto fresh = job / "signer";
         ensure_private_directory(fresh);
-        const auto private_file = fresh / "private.pem", public_file = fresh / "public.pem";
+        const auto private_file = fresh / "private.pem";
         run_signed_image_tool(job, "/usr/bin/openssl",
                               {"genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:4096",
                                "-out", private_file.string()},
                               60000);
         std::filesystem::permissions(private_file, std::filesystem::perms::owner_read |
                                                            std::filesystem::perms::owner_write);
-        run_signed_image_tool(
-                job, "/usr/bin/openssl",
-                {"pkey", "-in", private_file.string(), "-pubout", "-out", public_file.string()},
-                10000);
         publish(fresh, signing);
     }
 
-    const auto der = run_signed_image_tool(
-            job, "/usr/bin/openssl",
-            {"pkey", "-pubin", "-in", pub.string(), "-pubout", "-outform", "DER"}, 10000);
-    const auto spki = sha256_bytes(der);
     const auto release = job / "release";
     std::vector<std::string> image_args{base.string(),        artifacts.base.string(),
                                         filesystems.string(), std::string(profile),
-                                        pub.string(),         spki,
                                         priv.string(),        release.string()};
 
     if (display_id != filesystem_recipe.end()) {
@@ -152,8 +144,8 @@ SignedAndroidInput build_signed_profile_image(const std::filesystem::path &root,
 
     tool("build-image.sh", std::move(image_args));
     build.filesystems = filesystems;
-
-    return {release, pub, spki};
+    build.release = release;
+    build.key = priv;
 }
 
 std::map<std::string, std::string>
@@ -1099,8 +1091,7 @@ Json build_profile(const std::filesystem::path &root, std::string_view profile,
                    const std::filesystem::path &requested_jdk, std::function<bool()> cancelled,
                    bool cluster, bool multimedia, const std::filesystem::path &current_program,
                    const std::filesystem::path &reuse_qnx, const std::string &reuse_qnx_pin,
-                   const std::filesystem::path &reuse_qnx_source,
-                   const SignedAndroidInput &signed_android, std::string_view selected) {
+                   const std::filesystem::path &reuse_qnx_source, std::string_view selected) {
     need(reuse_qnx_source.empty() || !reuse_qnx.empty(),
          "QNX payload source requires pinned accepted receipt");
     need(reuse_qnx.empty() == reuse_qnx_pin.empty(), "paired QNX reuse receipt and pin required");
@@ -1108,8 +1099,7 @@ Json build_profile(const std::filesystem::path &root, std::string_view profile,
 
     const auto definition = authoring_profile(root, profile, selected);
 
-    if (!signed_android.release.empty() ||
-        !signed_filesystem_recipe(root, profile, definition).empty()) {
+    if (!signed_filesystem_recipe(root, profile, definition).empty()) {
         need(!cluster && multimedia && reuse_qnx.empty() &&
                      !std::filesystem::exists(build_target(root, profile, machine)),
              "signed Android requires a fresh multimedia-only machine");
@@ -1127,7 +1117,7 @@ Json build_profile(const std::filesystem::path &root, std::string_view profile,
         profile_feature(definition, "system_upgrade") && !cluster) {
         need(multimedia, "system upgrade requires Android subsystem");
         const auto candidate = build_profile_android(root, profile, machine, offline, jdk,
-                                                     std::move(cancelled), {}, {}, {}, selected);
+                                                     std::move(cancelled), {}, {}, selected);
         const std::filesystem::path android = candidate.at("candidate").get<std::string>();
 
         return release_build_generation(
@@ -1156,7 +1146,7 @@ Json build_profile(const std::filesystem::path &root, std::string_view profile,
 
         validate_accepted_qnx_reuse(root, profile, reuse_qnx, reuse_qnx_pin, reuse_qnx_source);
         const auto android = build_profile_android(root, profile, machine, offline, jdk,
-                                                   std::move(cancelled), {}, {}, {}, selected);
+                                                   std::move(cancelled), {}, {}, selected);
         const std::filesystem::path candidate = android.at("candidate").get<std::string>();
 
         return release_build_generation(root,
@@ -1171,8 +1161,7 @@ Json build_profile(const std::filesystem::path &root, std::string_view profile,
 
     if (!cluster) {
         const auto android = build_profile_android(root, profile, machine, offline, jdk,
-                                                   std::move(cancelled), {}, {}, signed_android,
-                                                   selected);
+                                                   std::move(cancelled), {}, {}, selected);
 
         const std::filesystem::path candidate = android.at("candidate").get<std::string>();
 
@@ -1297,7 +1286,7 @@ Json build_profile(const std::filesystem::path &root, std::string_view profile,
     }
 
     const auto android = build_profile_android(root, profile, machine, offline, jdk,
-                                               std::move(cancelled), {}, {}, {}, selected);
+                                               std::move(cancelled), {}, {}, selected);
     authoring_unchanged();
     const std::filesystem::path candidate = android.at("candidate").get<std::string>();
 
@@ -1312,21 +1301,18 @@ Json build_profile_android(const std::filesystem::path &root, std::string_view p
                            const MachineIdentity &machine, bool offline,
                            const std::filesystem::path &jdk, std::function<bool()> cancelled,
                            const std::filesystem::path &artifact_receipt,
-                           const std::string &artifact_receipt_pin,
-                           const SignedAndroidInput &signed_android, std::string_view selected) {
+                           const std::string &artifact_receipt_pin, std::string_view selected) {
     root_profile(root, profile);
     const auto definition = authoring_profile(root, profile, selected);
     const auto offline_recipe = signed_filesystem_recipe(root, profile, definition);
     const auto target = build_target(root, profile, machine);
 
-    if ((!signed_android.release.empty() || !offline_recipe.empty()) &&
+    if (!offline_recipe.empty() &&
         std::filesystem::exists(std::filesystem::symlink_status(target))) {
         throw VoyemuError("SIGNED_ANDROID", "signed Android requires a fresh machine destination");
     }
 
-    auto image = signed_android;
-    auto signed_release =
-            image.release.empty() ? Json() : verify_signed_android_input(root, image, definition);
+    Json signed_release;
     SignedImageBuild signed_build;
 
     if (std::filesystem::is_symlink(target) ||
@@ -1383,10 +1369,10 @@ Json build_profile_android(const std::filesystem::path &root, std::string_view p
                                 hash(artifacts.transport / "profile-artifacts.json", 1 << 20));
     }
 
-    if (image.release.empty() && !offline_recipe.empty()) {
-        image = build_signed_profile_image(root, profile, definition, artifacts, offline,
-                                           signed_build);
-        signed_release = verify_signed_android_input(root, image, definition);
+    if (!offline_recipe.empty()) {
+        build_signed_profile_image(root, profile, definition, artifacts, offline, signed_build);
+        signed_release = verify_signed_android_release(root, signed_build.release, signed_build.key,
+                                                       definition);
     }
 
     phase.done();
@@ -1404,14 +1390,11 @@ Json build_profile_android(const std::filesystem::path &root, std::string_view p
 
     request.tool_pins = host_pins(artifacts.sdk, definition);
 
-    if (!image.release.empty()) {
+    if (!signed_release.is_null()) {
         request.signed_release = signed_release;
-        request.signed_sdk = image.release / "sdk";
-
-        if (!signed_build.filesystems.empty()) {
-            request.signed_system_selections = signed_system_selections(offline_recipe,
-                                                                        signed_build.filesystems);
-        }
+        request.signed_sdk = signed_build.release / "sdk";
+        request.signed_system_selections = signed_system_selections(offline_recipe,
+                                                                    signed_build.filesystems);
     }
 
     // A profile may pin the port of its source candidate in emulator.candidatePort.

@@ -317,7 +317,7 @@ int main() try {
                                          std::string(64, 'c'));
     });
     auto unsigned_candidate = x86_candidate;
-    unsigned_candidate["signed_android"].erase("signature_sha256");
+    unsigned_candidate["signed_android"].erase("system_root_sha256");
     rejects([&] {
         validate_passion_power_candidate(x86_definition, unsigned_candidate, signed_images,
                                          std::string(64, 'c'));

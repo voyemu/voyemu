@@ -299,7 +299,7 @@ int build_command(const Arguments &args, const Emit &emit) {
                 return interrupted.load();
             },
             cluster, args.multimedia, voyemu::os::executable_path(), args.reuse_qnx,
-            args.reuse_qnx_sha256, args.reuse_qnx_source, args.signed_android, selected);
+            args.reuse_qnx_sha256, args.reuse_qnx_source, selected);
 
     if (!unavailable.empty()) {
         result["qnx_host"] = {{"status", "unavailable"},

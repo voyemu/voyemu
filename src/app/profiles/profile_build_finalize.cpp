@@ -3,6 +3,7 @@
 #include "profile_build_internal.hpp"
 #include "profile_catalog.hpp"
 #include "project_files.hpp"
+#include "signed_android.hpp"
 
 // Upgrades, finalizes and activates built profiles and their frontend and UI observer bindings.
 namespace voyemu {
@@ -510,18 +511,8 @@ static void export_android_machine_parts(
         runtime["android"]["boot_files"] = export_portable_boot_files(
                 root, definition, stage, reserve, android / "android" / metadata,
                 proof.at("files").at(metadata).at("sha256").get<std::string>());
-        const auto verified = stage / "android/signed-release";
-        ensure_private_directory(verified);
-
-        for (const auto &part : {std::pair{"manifest.sha256", "manifest_sha256"},
-                                 std::pair{"manifest.sig", "signature_sha256"}}) {
-            copy_portable_image(android / "android/signed-release" / part.first,
-                                proof.at(part.second).get<std::string>(), verified / part.first,
-                                reserve);
-        }
-
         runtime["android"]["signed_android"] = proof;
-        (void)checked_signed_android_boot_pins(root, stage, definition, runtime);
+        (void)checked_signed_android_boot_pins(stage, definition, runtime);
     } else {
         runtime["android"]["boot_files"] = export_portable_boot_files(root, definition, stage,
                                                                       reserve);

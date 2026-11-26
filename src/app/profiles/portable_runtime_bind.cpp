@@ -1399,7 +1399,7 @@ std::filesystem::path bind_machine_configuration(const std::filesystem::path &ro
                 // The pins need the android descriptor of the profile, which a machine that only
                 // runs its bound configuration or its cluster does not have to declare.
                 for (const auto &[name, pin] :
-                     checked_signed_android_boot_pins(root, seed, retained_definition, manifest)) {
+                     checked_signed_android_boot_pins(seed, retained_definition, manifest)) {
                     add_pin(launch["pins"], launch_base / name, pin);
                 }
             }

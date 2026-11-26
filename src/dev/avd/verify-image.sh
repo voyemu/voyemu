@@ -2,41 +2,28 @@
 set -euo pipefail
 umask 077
 export LC_ALL=C PYTHONDONTWRITEBYTECODE=1
-if [[ $# != 3 ]]; then
-    echo "Usage: $0 RELEASE TRUSTED_PUBLIC_PEM TRUSTED_SPKI_SHA256" >&2
+if [[ $# != 2 ]]; then
+    echo "Usage: $0 RELEASE KEY_PEM" >&2
     exit 2
 fi
 here=$(cd -- "$(dirname -- "$0")" && pwd -P)
 release=$(realpath -- "$1")
-pub=$(realpath -- "$2")
-expected=$3
-[[ "$expected" =~ ^[[:xdigit:]]{64}$ && "$pub" != "$release/"* ]] || exit 2
-actual=$(openssl pkey -pubin -in "$pub" -pubout -outform DER | sha256sum)
-[[ "${actual%% *}" == "$expected" ]] || { echo 'Wrong pinned public key' >&2; exit 1; }
+key=$(realpath -- "$2")
+[[ "$key" != "$release/"* ]] || exit 2
 cd "$release"
 for input in kernel-ranchu ramdisk.img system.img vendor.img userdata.img encryptionkey.img VerifiedBootParams.textproto; do
     [[ -s "sdk/$input" && ! -L "sdk/$input" ]] || exit 1
 done
 [[ -d sdk/data && -n "$(find sdk/data -type f -print -quit)" ]] || exit 1
-openssl dgst -sha256 -verify "$pub" -signature manifest.sig manifest.sha256
 [[ -z "$(find sdk partitions ! -type f ! -type d -print -quit)" ]] || exit 1
 temp=$(mktemp -d)
 trap 'rm -rf -- "$temp"' EXIT
-while IFS= read -r line; do
-    [[ "$line" =~ ^[a-f0-9]{64}[[:space:]]\ ([A-Za-z0-9_./+@-]+)$ ]] || exit 1
-    path=${BASH_REMATCH[1]}
-    [[ "$path" != /* && "/$path/" != *'/../'* && "/$path/" != *'/./'* ]] || exit 1
-    printf '%s\n' "$path" >> "$temp/list"
-done < manifest.sha256
-{ find sdk partitions -type f -print; printf '%s\n' release.properties; } | sort > "$temp/expected"
-sort "$temp/list" | cmp - "$temp/expected"
-sha256sum --strict --check --status manifest.sha256
 tools=$("$here/prepare-tools.sh" --verify-only)
 export PATH="$tools/bin:$PATH" LD_LIBRARY_PATH="$tools/lib64"
-avbtool extract_public_key --key "$pub" --output "$temp/key.avbpubkey"
-avbtool verify_image --image partitions/vbmeta.img --key "$pub" \
+avbtool extract_public_key --key "$key" --output "$temp/key.avbpubkey"
+avbtool verify_image --image partitions/vbmeta.img --key "$key" \
     --expected_chain_partition "system:1:$temp/key.avbpubkey" --follow_chain_partitions
-avbtool verify_image --image partitions/system.img --key "$pub"
+avbtool verify_image --image partitions/system.img --key "$key"
 digest=$(avbtool calculate_vbmeta_digest --image partitions/vbmeta.img --hash_algorithm sha256)
 top=$(avbtool info_image --image partitions/vbmeta.img)
 system=$(avbtool info_image --image partitions/system.img)

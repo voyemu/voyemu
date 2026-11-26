@@ -138,16 +138,6 @@ int main(int argc, char **argv) {
                     voyemu::native_current_active_directory(args.root, args.profile, args.machine));
         }
 
-        if (args.command == "trust-android-key") {
-            const auto &key = args.signed_android;
-            voyemu::trust_signed_android_key(args.root, key.public_key, key.spki_sha256);
-            std::cout << voyemu::cli::message(language, "output.android_key_trusted",
-                                              {{"fingerprint", key.spki_sha256}})
-                      << '\n';
-
-            return 0;
-        }
-
         if (args.command == "check") {
             return voyemu::cli::check_command(args, emit);
         }

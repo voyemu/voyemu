@@ -66,21 +66,9 @@ The QNX host image keeps the OEM bytes of every unchanged 64 KiB block of its bo
 
 Without `--force` `build` refuses an existing machine before any work and suggests starting it or deleting its directory; `--force` needs an existing machine. Preparation checks free space before each storage-heavy stage; tools, OEM inputs, intermediate files and writable disks need far more space than the firmware archive alone.
 
-On Linux a target with an offline filesystem recipe builds its Android 11 x86_64 system partitions from a pinned SDK archive. `build` applies the recipe, verifies the result and signs it with a local development key. The first build creates the key in `.local/toolchains/avd-image-tools/`. The SDK archive stays in its cache under its own digest. Before publishing a new machine, `build` boots the signed system twice, observes distinct kernel boot IDs and checks Android Verified Boot, the active dm-verity root and the read-only system mount. Writable user data follows the ordinary preparation path.
-
-Use an independently signed release for a fresh multimedia build with `--target=x86 --signed-android RELEASE --android-public-key FILE --android-public-key-sha256 SHA256`. The SHA-256 is the fingerprint of the public key's DER SubjectPublicKeyInfo. Obtain the original public PEM and the fingerprint through a trusted channel independent of the release. Signed system and vendor disks have no writable overlays.
+On Linux a target with an offline filesystem recipe builds its Android 11 x86_64 system partitions from a pinned SDK archive. `build` applies the recipe, verifies the result and signs it with a local development key. The first build creates the key in `.local/toolchains/avd-image-tools/`. The SDK archive stays in its cache under its own digest. Before publishing a new machine, `build` boots the signed system twice, observes distinct kernel boot IDs and checks Android Verified Boot, the active dm-verity root and the read-only system mount. Writable user data follows the ordinary preparation path; signed system and vendor disks have no writable overlays.
 
 Profiles using `qg-runtime` keep emulated NVRAM in `/data/user_de/0/com.voyemu/nvram` inside the guest. The first caller atomically creates it from the read-only `/system/etc/nvram` seed; later calls from OEM processes share the same file, which survives a cold boot in the machine's writable Android disk. Clearing the Android app data of `com.voyemu` removes this state, so the next access creates it from the seed again.
-
-## Trust a signed Android machine
-
-On a new Linux installation, register the signing key before running `check` or `start` on a copied signed machine. Use the original public PEM supplied by the builder and the independently obtained fingerprint. The machine's receipt also pins the exact bytes of that PEM.
-
-```sh
-./voyemu trust-android-key --android-public-key FILE --android-public-key-sha256 SHA256
-```
-
-The command verifies the fingerprint before storing the public key. `check` and `start` verify the signed manifest and boot files against the key trusted by that installation.
 
 ## Offline preparation
 

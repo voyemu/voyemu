@@ -1,6 +1,5 @@
 #pragma once
 #include "model.hpp"
-#include "signed_android.hpp"
 #include <functional>
 #include <map>
 namespace voyemu {
@@ -25,7 +24,7 @@ Json build_profile(const std::filesystem::path &root, std::string_view profile,
                    const std::filesystem::path &reuse_qnx = {},
                    const std::string &reuse_qnx_sha256 = {},
                    const std::filesystem::path &reuse_qnx_source = {},
-                   const SignedAndroidInput &signed_android = {}, std::string_view target = {});
+                   std::string_view target = {});
 // Read-only validation of a pinned stopped artifact preparation epoch.
 std::string current_profile_revision(const std::filesystem::path &root, std::string_view profile);
 Json validate_profile_artifact_resume(const std::filesystem::path &root, std::string_view profile,
@@ -39,7 +38,6 @@ Json build_profile_android(const std::filesystem::path &root, std::string_view p
                            std::function<bool()> cancelled = {},
                            const std::filesystem::path &artifact_receipt = {},
                            const std::string &artifact_receipt_sha256 = {},
-                           const SignedAndroidInput &signed_android = {},
                            std::string_view target = {});
 // Finalizer consumes an already stopped/cold-verified Android candidate and an
 // explicit accepted QNX seed receipt. It never reruns Android or replaces a profile.

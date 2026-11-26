@@ -1794,7 +1794,7 @@ static Json inspect_portable_runtime_impl(const std::filesystem::path &root,
     const auto definition = portable_profile_definition(root, profile, machine, seed);
     const auto family = runtime_profile_reference(definition, profile);
     check_android_guest_identity(definition, manifest);
-    const auto boot_pins = checked_signed_android_boot_pins(root, seed, definition, manifest);
+    const auto boot_pins = checked_signed_android_boot_pins(seed, definition, manifest);
     const auto api = manifest.at("android").at("api").get<unsigned>();
     const bool android_only = manifest.contains("scope");
 
