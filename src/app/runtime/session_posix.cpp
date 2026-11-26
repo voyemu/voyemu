@@ -410,9 +410,10 @@ void Session::assert_android_identity() {
                 std::filesystem::path(android_spec_.at("executable").get<std::string>());
         const auto arch = android_spec_.value("guest_arch", std::string("aarch64"));
 
+        // Preparation records only x86_64 from the package of the profile; other values come from
+        // a damaged launch specification, not from the running guest.
         if (arch != "x86_64" && arch != "aarch64") {
-            throw VoyemuError("ANDROID_IDENTITY_MISMATCH",
-                              "unsupported Android SDK guest architecture");
+            throw VoyemuError("LAUNCH_SCHEMA", "unsupported Android SDK guest architecture");
         }
 
         const auto engine = "qemu-system-" + arch + (android_sdk_headless_ ? "-headless" : "");
