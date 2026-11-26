@@ -394,6 +394,13 @@ std::filesystem::path bind_machine_configuration(const std::filesystem::path &ro
 
         const auto launch = read_private_json(directory / "android-launch.json");
 
+        // A malformed Free wheel contract fails before host state such as a busy console tuple
+        // can mark the cache stale and rebuild it.
+        if (qinggan11_wheel_provider_profile(family)) {
+            need(launch.contains("wheel_capability"), "Free cached wheel capability missing");
+            (void)qinggan11_wheel_unsupported(launch);
+        }
+
         const auto abi = android_guest_abi(retained_definition);
 
         if (abi == "x86_64" &&
@@ -619,8 +626,6 @@ std::filesystem::path bind_machine_configuration(const std::filesystem::path &ro
         }
 
         if (qinggan11_wheel_provider_profile(family)) {
-            need(launch.contains("wheel_capability"), "Free cached wheel capability missing");
-            (void)qinggan11_wheel_unsupported(launch);
             const auto capability = qinggan11_wheel_capability(definition);
 
             if (launch.value("wheel_capability", Json{}) != capability) {

@@ -29,6 +29,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <memory>
 #ifdef _WIN32
 #include "wine_native_backend_windows.hpp"
 #ifndef NOMINMAX
@@ -4860,11 +4861,20 @@ int main(int argc, char **argv) {
                       "API30 prepared sysdir lost clean boot metadata");
             }
 
-            {
+            // A console tuple held by another process makes the cache stale; the malformed
+            // contract is rejected before that host state is consulted.
+            for (const bool busy : {false, true}) {
                 auto stale_wheel = launch30;
                 stale_wheel.erase("wheel_capability");
                 stale_wheel["wheel_adapter"] = {{"authority", "com.voyemu.input.wheel"}};
                 write_private_json(bound30 / "android-launch.json", stale_wheel);
+                std::unique_ptr<AndroidPortLease> holder;
+
+                if (busy) {
+                    holder = std::make_unique<AndroidPortLease>(preferred_port30);
+                    check(holder->held(), "console lease of the fixture unavailable");
+                }
+
                 bool denied = false;
                 try {
                     bind_machine_configuration(app, free30, api30_machine, seed30, program, true,
@@ -4874,9 +4884,11 @@ int main(int argc, char **argv) {
                 }
 
                 check(denied && read_private_json(bound30 / "android-launch.json") == stale_wheel,
-                      "malformed Free cached wheel contract was silently repaired");
+                      busy ? "malformed Free cached wheel contract was repaired on a busy console"
+                           : "malformed Free cached wheel contract was silently repaired");
                 write_private_json(bound30 / "android-launch.json", launch30);
             }
+
             {
                 auto installed = definition30;
                 installed["components"]["wheel-input"] = "components/wheel-input";
