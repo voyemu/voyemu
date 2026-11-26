@@ -173,6 +173,60 @@ int main(int argc, char **argv) {
             return 0;
         }
 
+        if (argc == 3 && std::string_view(argv[1]) == "--api30-early-property") {
+            // The real extracted API30 plat_property_contexts of the Free A11 base drives the
+            // pinned chain: the cluster/Hiboard step output feeds the early property step.
+            std::ifstream f(argv[2], std::ios::binary);
+            check(bool(f), "API30 property context input required");
+            const std::string source{std::istreambuf_iterator<char>(f), {}};
+            check(sha256_bytes(source) ==
+                          "a49213f01ea1f8ec19b41311116bc9324c682af1482297e4bbbc05265dfd623e",
+                  "exact clean API30 platform property contexts required");
+            const auto after_cluster =
+                    source + "persist.clusterCardInfo u:object_r:system_prop:s0 exact string\n"
+                             "ignoreActivation u:object_r:system_prop:s0 exact bool\n";
+            check(sha256_bytes(after_cluster) ==
+                          "50c13ef43f195b1b94c5e1ed85f3a33578220e6074d9d244414ae73c9837d2db",
+                  "cluster and Hiboard step output remains exact");
+            const auto output = apply_qinggan11_can_early_property_patch(qinggan11_scope, 30,
+                                                                         after_cluster);
+            check(output.substr(0, after_cluster.size()) == after_cluster &&
+                          output.substr(after_cluster.size()) ==
+                                  "qinggan.thirdscreen.standby u:object_r:system_prop:s0 exact bool\n"
+                                  "sys.voyemu.early.ready u:object_r:can_early_ready_prop:s0 exact string\n"
+                                  "sys.voyemu.early.probe u:object_r:exported3_system_prop:s0 exact string\n" &&
+                          sha256_bytes(output) ==
+                                  "3ba593c9e010284511a1433a599c345e89c115122059238cd3aa9842fb33cbcd",
+                  "all platform bytes preserved with the exact rear-screen standby and early properties");
+
+            for (int i = 0; i < 5; ++i) {
+                bool denied = false;
+                try {
+                    const auto bytes =
+                            i == 0   ? source
+                            : i == 1 ? after_cluster + "qinggan.thirdscreen.standby "
+                                                       "u:object_r:system_prop:s0 exact bool\n"
+                            : i == 2 ? after_cluster + "qinggan.thirdscreen.standby "
+                                                       "u:object_r:default_prop:s0 exact bool\n"
+                            : i == 3 ? after_cluster + "qinggan.thirdscreen.standby "
+                                                       "u:object_r:system_prop:s0 exact string\n"
+                                     : after_cluster;
+                    apply_qinggan11_can_early_property_patch(i == 4 ? passion_scope
+                                                                    : qinggan11_scope,
+                                                             30, i == 4 ? after_cluster : bytes);
+                } catch (...) {
+                    denied = true;
+                }
+
+                check(denied, "standby baseline/duplicate/label/type/scope guards");
+            }
+
+            std::cout
+                    << "actual API30 early property contexts with the rear-screen standby passed\n";
+
+            return 0;
+        }
+
         bool passion_unpinned = false;
         try {
             apply_passion_selinux_patch(passion_scope, 30, "services", "unverified fixture");

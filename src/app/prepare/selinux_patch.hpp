@@ -77,7 +77,7 @@ inline constexpr std::array<Api30FileRecipe, 9> qinggan11_original_navi_api30_fi
           "e8f3b8cb54b3ec09280cf5c630f495b3202f1c9994e796c5a1cf707a5dcd6cf6"},
          {"can-early-property-contexts-api30", "/system/etc/selinux/plat_property_contexts",
           "a49213f01ea1f8ec19b41311116bc9324c682af1482297e4bbbc05265dfd623e",
-          "6618819c1a2cf856486d66e270459aeccfe03d8d7837c9cc946940cd5a104493"},
+          "3ba593c9e010284511a1433a599c345e89c115122059238cd3aa9842fb33cbcd"},
          {"selinux-hash-api30", "/system/etc/selinux/plat_sepolicy_and_mapping.sha256",
           "391829e0167f44415e54ba64692ad410b1398b16263869beb22e427130eae766",
           "7293ab8b5ff6f3890a7f60b158e6bf28c882896c755edf1e996c9231519c37de"}}};

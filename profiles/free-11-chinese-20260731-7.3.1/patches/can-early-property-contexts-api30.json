@@ -3,6 +3,6 @@
   "api": 30,
   "native": true,
   "input_sha256": "50c13ef43f195b1b94c5e1ed85f3a33578220e6074d9d244414ae73c9837d2db",
-  "output_sha256": "6618819c1a2cf856486d66e270459aeccfe03d8d7837c9cc946940cd5a104493",
-  "description": "Exact pinned API30 native early input property contexts; appends the registered early readiness properties on top of the patched Free A11 7.3.1 property contexts."
+  "output_sha256": "3ba593c9e010284511a1433a599c345e89c115122059238cd3aa9842fb33cbcd",
+  "description": "Exact pinned API30 native early input property contexts; appends the rear-screen standby system_prop bool with the registered early readiness properties on top of the patched Free A11 7.3.1 property contexts."
 }
