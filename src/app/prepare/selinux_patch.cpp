@@ -480,17 +480,22 @@ std::string apply_qinggan11_can_early_policy_patch(ProfileScope scope, unsigned 
 std::string apply_qinggan11_can_early_property_patch(ProfileScope scope, unsigned api,
                                                      std::string_view input) {
     if (scope != qinggan11_scope || api != 30 ||
-        sha256_bytes(input) != "50c13ef43f195b1b94c5e1ed85f3a33578220e6074d9d244414ae73c9837d2db") {
+        sha256_bytes(input) != "50c13ef43f195b1b94c5e1ed85f3a33578220e6074d9d244414ae73c9837d2db" ||
+        input.find("qinggan.thirdscreen.standby") != std::string::npos) {
         throw VoyemuError("SELINUX_PATCH_MISMATCH",
                           "exact patched API30 Free A11 7.3.1 property contexts required");
     }
 
+    // The rear-screen standby bool keeps the OEM system_app write path: the vendor policy of the
+    // original firmware allowed system_app to set its own qinggan property types, and the clean
+    // platform system_prop keeps that exact grant for the system_app domain of the app.
     auto output =
             std::string(input) +
+            "qinggan.thirdscreen.standby u:object_r:system_prop:s0 exact bool\n"
             "sys.voyemu.early.ready u:object_r:can_early_ready_prop:s0 exact string\nsys.voyemu.early.probe u:object_r:exported3_system_prop:s0 exact string\n";
 
     if (sha256_bytes(output) !=
-        "6618819c1a2cf856486d66e270459aeccfe03d8d7837c9cc946940cd5a104493") {
+        "3ba593c9e010284511a1433a599c345e89c115122059238cd3aa9842fb33cbcd") {
         throw VoyemuError("SELINUX_PATCH_MISMATCH", "API30 early property output differs");
     }
 
