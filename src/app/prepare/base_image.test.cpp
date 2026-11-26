@@ -69,6 +69,19 @@ int main(int argc, char **argv) {
             throw std::runtime_error("clean Android API/ABI mismatch");
         }
 
+        auto mixed = x86;
+        mixed["url"] = api30.at("url");
+        bool mixed_rejected = false;
+        try {
+            (void)native_base_identity(mixed);
+        } catch (const VoyemuError &error) {
+            mixed_rejected = error.code() == "BASE_DESCRIPTOR";
+        }
+
+        if (!mixed_rejected) {
+            throw std::runtime_error("x86_64 package accepted an archive of another ABI");
+        }
+
         const auto accelerated = [](const Json &image, const Json &acceleration) {
             return Json{{"android", image}, {"emulator", {{"acceleration", acceleration}}}};
         };

@@ -1,4 +1,5 @@
 #pragma once
+#include "base_image.hpp"
 #include "model.hpp"
 #include "passion_mcu_property.hpp"
 #include "passion_wheel.hpp"
@@ -119,8 +120,7 @@ inline Json passion_startup_values(const Json &definition) {
     if (definition.value("schema", 0) != 1 ||
         !record_declares(definition, ProfilePlatform::passion, ProfileBoard::sa8155) ||
         (status != "ready" && status != "incomplete") ||
-        (package != "system-images;android-30;default;arm64-v8a" &&
-         package != "system-images;android-30;default;x86_64") ||
+        android_package_identity(package).api != 30 ||
         definition.value("initial_state", Json::object()) != Json::object()) {
         throw VoyemuError("PASSION_PRESENTATION",
                           "exact API30 Passion profile with unsupported vehicle state required");

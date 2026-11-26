@@ -23,15 +23,15 @@ AndroidBaseIdentity native_base_identity(const Json &descriptor) {
                revision = descriptor.value("revision", std::string{}),
                url = descriptor.value("url", std::string{});
     const auto identity = android_package_identity(package);
+    const std::string images = "https://dl.google.com/android/repository/sys-img/android/";
+    // The x86_64 archive name carries the ABI and API of its package.
     const bool x86 = identity.abi == "x86_64";
+    const auto archive = images + std::string(identity.abi) + "-" + std::to_string(identity.api) +
+                         "_";
 
     if (identity.api == 0 || revision.empty() ||
-        revision.find_first_not_of("0123456789") != std::string::npos ||
-        !url.starts_with("https://dl.google.com/android/repository/sys-img/android/") ||
-        (x86 &&
-         !url.starts_with("https://dl.google.com/android/repository/sys-img/android/x86_64-" +
-                          std::to_string(identity.api) + "_")) ||
-        !sha256_pin(descriptor.value("sha256", Json()))) {
+        revision.find_first_not_of("0123456789") != std::string::npos || !url.starts_with(images) ||
+        (x86 && !url.starts_with(archive)) || !sha256_pin(descriptor.value("sha256", Json()))) {
         throw VoyemuError("BASE_DESCRIPTOR", "unsupported or unpinned Android system image");
     }
 
