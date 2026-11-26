@@ -302,43 +302,30 @@ int main(int argc, char **argv) {
             spec.directory = root;
             spec.arguments = {"build", profile, "--offline", "--lang=en"};
             const auto result = execute_lf(spec);
-            const bool arm = os::dependency_host == "darwin/arm64";
-            const bool linux_x64 = os::dependency_host == "linux/x64";
-            const bool supported = arm || (linux_x64 && os::host_kvm_available());
-            const std::string target = arm ? "arm" : "x86";
+            const bool x86 = os::dependency_host == "linux/x64" && os::host_kvm_available();
+            const std::string target = x86 ? "x86" : "arm";
             const auto machine = std::filesystem::path("machines") / (profile + "-" + target);
             require(!result.timed_out && result.exit_code == 4,
                     "targeted build did not stop at its fixture boundary: " + result.output);
-
-            if (supported) {
-                const auto choice = "Selected " + target + " (" + (arm ? "arm64-v8a" : "x86_64") +
-                                    ") for ";
-                const auto verify = [&](const ProcessResult &attempt,
-                                        const std::filesystem::path &destination) {
-                    require(!attempt.timed_out && attempt.exit_code == 4 &&
-                                    attempt.output.starts_with(choice + destination.string() +
-                                                               ".\n") &&
-                                    (attempt.output.find("JAVA_HELPER_ASSET_MISSING:") !=
-                                             std::string::npos ||
-                                     attempt.output.find("DOWNLOAD_OFFLINE:") != std::string::npos),
-                            "targeted build did not select its destination or reach preparation: " +
-                                    attempt.output);
-                };
-                verify(result, machine);
-                const auto alternate = std::filesystem::path("machines") / "explicit-build";
-                spec.arguments.emplace_back("--target=" + target);
-                spec.arguments.emplace_back(alternate.string());
-                verify(execute_lf(spec), alternate);
-                require(!std::filesystem::exists(root / alternate),
-                        "offline targeted build published its explicit destination");
-            } else {
-                require(result.output.starts_with("Voyemu: PROFILE_TARGET:") &&
-                                result.output.find(linux_x64 ? "/dev/kvm" : os::dependency_host) !=
-                                        std::string::npos &&
-                                result.output.find("Preparing machine") == std::string::npos,
-                        "target failure did not identify the missing host capability: " +
-                                result.output);
-            }
+            const auto choice =
+                    "Selected " + target + " (" + (x86 ? "x86_64" : "arm64-v8a") + ") for ";
+            const auto verify = [&](const ProcessResult &attempt,
+                                    const std::filesystem::path &destination) {
+                require(!attempt.timed_out && attempt.exit_code == 4 &&
+                                attempt.output.starts_with(choice + destination.string() + ".\n") &&
+                                (attempt.output.find("JAVA_HELPER_ASSET_MISSING:") !=
+                                         std::string::npos ||
+                                 attempt.output.find("DOWNLOAD_OFFLINE:") != std::string::npos),
+                        "targeted build did not select its destination or reach preparation: " +
+                                attempt.output);
+            };
+            verify(result, machine);
+            const auto alternate = std::filesystem::path("machines") / "explicit-build";
+            spec.arguments.emplace_back("--target=" + target);
+            spec.arguments.emplace_back(alternate.string());
+            verify(execute_lf(spec), alternate);
+            require(!std::filesystem::exists(root / alternate),
+                    "offline targeted build published its explicit destination");
 
             require(!std::filesystem::exists(root / machine) &&
                             std::filesystem::is_empty(root / ".local/machines"),

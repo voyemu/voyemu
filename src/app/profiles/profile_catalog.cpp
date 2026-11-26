@@ -222,14 +222,15 @@ std::string select_profile_target(const Json &definition, std::string_view reque
     }
 
     const auto &targets = definition.at("targets");
-    const auto selected = requested.empty() ? (host == "darwin/arm64" ? "arm" : "x86") : requested;
+    const auto selected =
+            requested.empty() ? (host == "linux/x64" && kvm_available ? "x86" : "arm") : requested;
 
     if (!targets.is_object() || !targets.contains(selected)) {
         throw cli::LocalizedError("PROFILE_TARGET", "error.profile_target_missing",
                                   {{"target", std::string(selected)}});
     }
 
-    if (selected == "arm" && host == "darwin/arm64") {
+    if (selected == "arm") {
         return "arm";
     }
 

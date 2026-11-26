@@ -490,10 +490,24 @@ static void verify_qinggan11_view_graph(const std::filesystem::path &profiles) {
     }
 }
 
+static void verify_profile_target_hosts() {
+    const Json definition = {{"targets", {{"arm", {{"guestAbi", "arm64-v8a"}}},
+                                          {"x86", {{"guestAbi", "x86_64"}}}}}};
+
+    // Before build targets, the ARM guest was prepared on every host, without acceleration
+    // where the host has none.
+    for (const auto *host : {"darwin/arm64", "win32/x64", "linux/x64"}) {
+        check(select_profile_target(definition, "", host, false) == "arm" &&
+                      select_profile_target(definition, "arm", host, false) == "arm",
+              "the ARM target stays available on every host");
+    }
+}
+
 int main(int argc, char **argv) {
     try {
         verify_profile_pair_unit();
         verify_profile_properties();
+        verify_profile_target_hosts();
         verify_can_model_binding();
 
         if (argc == 4 && std::string_view(argv[1]) == "--profile-parity") {
@@ -541,7 +555,7 @@ int main(int argc, char **argv) {
                       "default and explicit profile targets follow host capability");
 
                 for (const auto &[target, host] :
-                     std::array<std::pair<std::string, std::string>, 3>{{{"", "linux/x64"},
+                     std::array<std::pair<std::string, std::string>, 3>{{{"x86", "linux/x64"},
                                                                          {"x86", "darwin/arm64"},
                                                                          {"other", "linux/x64"}}}) {
                     bool rejected = false;
