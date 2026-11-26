@@ -1699,6 +1699,7 @@ Json portable_profile_definition(const std::filesystem::path &root, std::string_
 
 namespace portable_detail {
 void check_android_guest_identity(const Json &definition, const Json &manifest) {
+    need(definition.contains("android"), "profile declares no Android base");
     const auto &android = manifest.at("android");
     const auto identity = native_base_identity(definition.at("android"));
 

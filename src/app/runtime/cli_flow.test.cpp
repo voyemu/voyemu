@@ -427,6 +427,7 @@ int main(int argc, char **argv) try {
                                            .value("initial_state", Json::object())},
                  {"displays",
                   embedded_profile(qinggan09_profile()).at("definition").at("displays")},
+                 {"android", embedded_profile(qinggan09_profile()).at("definition").at("android")},
                  {"wheel", {{"assets", "profiles/common/wheels/free-2021"}}}});
         auto help = run({"help"});
         require(help.exit_code == 0 && help.output.find("--cluster=on|off") != std::string::npos &&
@@ -740,12 +741,16 @@ int main(int argc, char **argv) try {
         ensure_private_directory(selected_machine / "android");
         const auto system_fixture = selected_machine / "android/system.img";
         std::filesystem::copy_file(machine / "system.img", system_fixture);
-        fixture_manifest["android"] = {{"api", 28},
-                                       {"images",
-                                        {{"system.img",
-                                          {{"file", "android/system.img"},
-                                           {"bytes", std::filesystem::file_size(system_fixture)},
-                                           {"sha256", sha256_file(system_fixture)}}}}}};
+        fixture_manifest["android"] = {
+                {"api", 28},
+                {"abi", "arm64-v8a"},
+                {"base_archive_sha256",
+                 embedded_profile(qinggan09_profile()).at("definition").at("android").at("sha256")},
+                {"images",
+                 {{"system.img",
+                   {{"file", "android/system.img"},
+                    {"bytes", std::filesystem::file_size(system_fixture)},
+                    {"sha256", sha256_file(system_fixture)}}}}}};
         Json resources = Json::object();
 
         for (const auto *name :

@@ -121,6 +121,7 @@ Json verify_signed_android_release(const std::filesystem::path &root,
 std::map<std::string, std::string>
 checked_signed_android_boot_pins(const std::filesystem::path &seed, const Json &definition,
                                  const Json &manifest) {
+    need(definition.contains("android"), "profile declares no Android base");
     auto pins = portable_clean_boot_pins(definition.at("android"));
     const auto &android = manifest.at("android");
 

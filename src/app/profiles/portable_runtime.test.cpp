@@ -323,6 +323,31 @@ void signed_boot_pin_checks(const std::filesystem::path &root) {
     std::filesystem::remove_all(seed);
 }
 
+// Start once reported a profile without an Android base as INTERNAL_ERROR_UNKNOWN from a missing
+// JSON key; both checks of every start name the failure with their own code.
+void undeclared_android_checks(const std::filesystem::path &root) {
+    const Json definition = {{"id", "synthetic-no-android"}};
+    const Json manifest = {{"profile", "synthetic-no-android"}, {"android", {{"api", 28}}}};
+
+    for (const auto &verify : std::vector<std::function<void()>>{
+                 [&] {
+                     (void)checked_signed_android_boot_pins(root, definition, manifest);
+                 },
+                 [&] {
+                     portable_detail::check_android_guest_identity(definition, manifest);
+                 }}) {
+        // A missing JSON key escapes as nlohmann::json::out_of_range and fails the test.
+        bool coded = false;
+        try {
+            verify();
+        } catch (const VoyemuError &) {
+            coded = true;
+        }
+
+        check(coded, "profile without an Android base passed its checks");
+    }
+}
+
 void cache(const std::filesystem::path &path) {
     ensure_private_directory(path.parent_path());
     std::ofstream out(path, std::ios::binary);
@@ -3068,6 +3093,7 @@ int main(int argc, char **argv) {
             passion_system_upgrade_checks(root, std::filesystem::canonical(argv[0]));
             sparse_copy_checks(root);
             signed_boot_pin_checks(root);
+            undeclared_android_checks(root);
         }
 
 #ifdef _WIN32
