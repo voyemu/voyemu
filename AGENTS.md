@@ -32,7 +32,7 @@
 - Use the latest release of a new dependency unless a reason is documented
 - Build in Release without debug symbols
 - Use concept-first type names and configure tools explicitly through `config/config-*`
-- Use CMake for build logic, Java for preparation, Java, CMake, or C++ for checks and generators, and shell for short glue scripts
+- Use CMake for build logic, [Java](docs/why/java-preparation.md) for APK, JAR, and DEX preparation and input acquisition, C++ for the machine lifecycle and the rest of the launcher, Java, CMake, or C++ for checks and generators, and shell for short glue scripts
 - Report failures with [VoyemuError codes](docs/why/error-codes.md) and use `_UNKNOWN` only for an unknown outcome
 - Avoid unrelated refactors, cleanup, and formatting
 - Add abstractions, settings, and error handling only when needed for the requested change
