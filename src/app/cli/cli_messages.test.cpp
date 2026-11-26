@@ -208,7 +208,7 @@ void help() {
         rendered.insert(text);
 
         for (const auto *syntax :
-             {"start MACHINE_PATH", "build PROFILE [MACHINE_PATH] [--target=arm|x86]",
+             {"start MACHINE_PATH", "build PROFILE [MACHINE_PATH] [--target=TARGET]",
               "--cluster=on|off", "--multimedia=on|off", "--network=yes|no", "--lang=en|ru|zh",
               "fetch PROFILE --source=adb --serial SERIAL", R"('{"speed":80}')",
               "voyemu test --request request.json"}) {
@@ -229,10 +229,10 @@ void help() {
                               "machine\n  start MACHINE_PATH     Launch the selected machine "
                               "directory\n"),
           "English help keeps its layout");
-    check(english.find("  build PROFILE [MACHINE_PATH] [--target=arm|x86]\n"
+    check(english.find("  build PROFILE [MACHINE_PATH] [--target=TARGET]\n"
                        "                         Prepare a new machine. The default path is "
-                       "machines/PROFILE. Targets arm and x86 use machines/PROFILE-arm and "
-                       "machines/PROFILE-x86, respectively.\n") != std::string::npos,
+                       "machines/PROFILE; a build target for another processor than that of this "
+                       "host uses machines/PROFILE-TARGET.\n") != std::string::npos,
           "long syntax moves its description to the next line");
     const auto names = embedded_profile_names();
     check(std::any_of(names.begin(), names.end(),
@@ -277,6 +277,18 @@ void errors() {
                                   log.string() +
                                   ". If the error persists, attach the log to a problem report.\n",
           "an uncatalogued error keeps its code and names the log");
+    const auto unaccelerated = std::make_exception_ptr(
+            VoyemuError("ANDROID_ACCELERATION", "private technical detail"));
+
+    for (const auto language : cli::languages) {
+        const auto visible = human_cli_error(unaccelerated, language, log);
+        check(visible.find("ANDROID_ACCELERATION: " +
+                           cli::message(language, "error.android_acceleration")) !=
+                              std::string::npos &&
+                      visible.find("private technical detail") == std::string::npos,
+              "missing acceleration names its remedy in the selected language");
+    }
+
     const auto rejected = std::make_exception_ptr(
             VoyemuError("ANDROID_VERIFIED_BOOT", "private technical detail"));
 

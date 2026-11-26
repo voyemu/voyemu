@@ -6,7 +6,7 @@ Linux x64 is a host like macOS on Apple Silicon and Windows x64. The launcher ta
 
 ## Context
 
-Many developers and CI runners work on Linux. RHEL 9, Ubuntu 22.04 and Debian 12 ship glibc 2.34 or newer together with libcurl and OpenSSL 3. The pinned Android Emulator on Linux x64 requires an x86_64 Android system image for Passion multimedia. The [Passion `x86` target](../profiles/passion-11-russian-20260403-2.1.4.80.md#linux-x86_64-target) uses that ABI with KVM and the host GPU.
+Many developers and CI runners work on Linux. RHEL 9, Ubuntu 22.04 and Debian 12 ship glibc 2.34 or newer together with libcurl and OpenSSL 3. The pinned Android Emulator on Linux x64 requires an x86_64 Android system image for Passion multimedia. The [Passion `x86` target](../profiles/passion-11-russian-20260403-2.1.4.80.md#x86-target) uses that ABI with hardware acceleration and the host GPU.
 
 ## Alternatives
 

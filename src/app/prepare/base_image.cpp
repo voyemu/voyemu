@@ -29,7 +29,8 @@ AndroidBaseIdentity native_base_identity(const Json &descriptor) {
         revision.find_first_not_of("0123456789") != std::string::npos ||
         !url.starts_with("https://dl.google.com/android/repository/sys-img/android/") ||
         (x86 &&
-         !url.starts_with("https://dl.google.com/android/repository/sys-img/android/x86_64-30_")) ||
+         !url.starts_with("https://dl.google.com/android/repository/sys-img/android/x86_64-" +
+                          std::to_string(identity.api) + "_")) ||
         !sha256_pin(descriptor.value("sha256", Json()))) {
         throw VoyemuError("BASE_DESCRIPTOR", "unsupported or unpinned Android system image");
     }
@@ -37,19 +38,23 @@ AndroidBaseIdentity native_base_identity(const Json &descriptor) {
     return identity;
 }
 
-bool android_kvm(const Json &definition) {
-    const auto android = definition.value("android", Json::object());
-    const auto emulator = definition.value("emulator", Json::object());
-    const bool x86 = android_package_identity(android.value("package", std::string{})).abi ==
-                     "x86_64";
+std::string_view android_guest_abi(const Json &definition) {
+    if (!definition.contains("android")) {
+        return "arm64-v8a";
+    }
 
-    if (!x86 && !emulator.contains("acceleration")) {
+    return native_base_identity(definition.at("android")).abi;
+}
+
+bool android_acceleration_required(const Json &definition) {
+    const auto emulator = definition.value("emulator", Json::object());
+
+    if (!emulator.contains("acceleration")) {
         return false;
     }
 
-    if (!x86 || emulator.value("acceleration", Json{}) != "kvm") {
-        throw VoyemuError("ANDROID_ACCELERATION",
-                          "x86_64 Android requires emulator.acceleration=kvm");
+    if (emulator.at("acceleration") != "required") {
+        throw VoyemuError("ANDROID_ACCELERATION", "emulator.acceleration accepts only required");
     }
 
     return true;

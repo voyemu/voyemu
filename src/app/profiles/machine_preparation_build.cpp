@@ -129,11 +129,11 @@ Json verify_signed_android_input(const std::filesystem::path &root, const Signed
     const auto require = require_signed_android;
     const auto read = read_signed_android_metadata;
 
-    require(os::platform_name == "Linux", "signed Android preparation requires Linux");
+    require(os::host_signed_android_preparation, "signed Android preparation requires Linux");
     const auto &base = profile.at("android");
     const auto identity = native_base_identity(base);
-    require(identity.api == 30 && identity.abi == "x86_64" && android_kvm(profile),
-            "signed Android release requires an API30 x86_64 KVM profile");
+    require(identity.api == 30 && identity.abi == "x86_64" && profile_signed_preparation(profile),
+            "signed Android release requires an API30 x86_64 signed-offline target");
     const auto release = input.release;
     const auto key = input.public_key;
     ordinary(release);
@@ -246,9 +246,7 @@ checked_signed_android_boot_pins(const std::filesystem::path &root,
     const auto &android = manifest.at("android");
 
     if (!android.contains("signed_android")) {
-        const auto target = definition.value("target", Json::object());
-        require_signed_android(target.value("preparation", std::string{}) != "signed-offline" &&
-                                       !android_kvm(definition),
+        require_signed_android(!profile_signed_preparation(definition),
                                "signed Android proof required for this machine");
 
         return pins;
@@ -261,9 +259,10 @@ checked_signed_android_boot_pins(const std::filesystem::path &root,
     const auto &proof = android.at("signed_android");
     const auto &files = proof.at("files");
     const std::regex boot_id("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}");
-    need(android_kvm(definition) && android.at("abi") == "x86_64" && android.at("api") == 30 &&
-                 manifest.value("scope", std::string{}) == "android" && !manifest.contains("qnx") &&
-                 proof.size() == 10 && files.is_object() && !files.empty() && files.size() <= 64 &&
+    need(profile_signed_preparation(definition) && android.at("abi") == "x86_64" &&
+                 android.at("api") == 30 && manifest.value("scope", std::string{}) == "android" &&
+                 !manifest.contains("qnx") && proof.size() == 10 && files.is_object() &&
+                 !files.empty() && files.size() <= 64 &&
                  proof.at("base_archive_sha256") == android.at("base_archive_sha256") &&
                  android.at("base_archive_sha256") == definition.at("android").at("sha256") &&
                  std::regex_match(proof.at("first_boot_id").get<std::string>(), boot_id) &&
@@ -1210,14 +1209,14 @@ Json build_android_candidate(const std::filesystem::path &root,
 
     need(actual == clean_files, "clean base inventory differs");
     const auto abi = native_base_identity(profile.at("android")).abi;
-    const bool x86 = android_kvm(profile);
+    const bool x86 = abi == "x86_64";
     const std::string exe(os::executable_suffix), host(os::emulator_host);
     const auto emulator = request.sdk / ("emulator/emulator" + exe),
                adb = request.sdk / ("platform-tools/adb" + exe),
                aapt2 = request.sdk / ("build-tools/36.1.0/aapt2" + exe),
                qemu_img = request.sdk / ("emulator/qemu-img" + exe),
                backend = request.sdk / "emulator/qemu" / host /
-                         ((x86 ? "qemu-system-x86_64" : "qemu-system-aarch64") + exe);
+                         ("qemu-system-" + std::string(android_qemu_arch(abi)) + exe);
 
     for (const auto &file : {emulator, adb, aapt2, qemu_img, backend}) {
         tool(request, file);

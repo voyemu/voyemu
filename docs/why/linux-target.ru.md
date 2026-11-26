@@ -6,7 +6,7 @@ Linux x64 — такой же хост, как macOS на Apple Silicon и Windo
 
 ## Контекст
 
-Многие разработчики и исполнители CI работают на Linux. RHEL 9, Ubuntu 22.04 и Debian 12 поставляют glibc 2.34 или новее вместе с libcurl и OpenSSL 3. Для мультимедиа Passion закреплённому Android Emulator в Linux x64 нужен системный образ Android x86_64. [Цель `x86` профиля Passion](../profiles/passion-11-russian-20260403-2.1.4.80.ru.md#цель-для-linux-x86_64) использует этот ABI с KVM и GPU хоста.
+Многие разработчики и исполнители CI работают на Linux. RHEL 9, Ubuntu 22.04 и Debian 12 поставляют glibc 2.34 или новее вместе с libcurl и OpenSSL 3. Для мультимедиа Passion закреплённому Android Emulator в Linux x64 нужен системный образ Android x86_64. [Цель `x86` профиля Passion](../profiles/passion-11-russian-20260403-2.1.4.80.ru.md#цель-x86) использует этот ABI с аппаратным ускорением и GPU хоста.
 
 ## Альтернативы
 

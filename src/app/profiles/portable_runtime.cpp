@@ -772,14 +772,14 @@ std::string runtime_avd_config(const Json &definition, const std::filesystem::pa
 
     need(memory >= 512 && memory <= 16384 && cores >= 1 && cores <= 8,
          "bounded profile memory/CPU configuration required");
-    const bool x86 = android_kvm(definition);
+    const auto abi = android_guest_abi(definition);
     std::map<std::string, std::string> values{
             {"AvdId", avd},
             {"avd.ini.displayname", definition.value("id", std::string("Voyemu"))},
             {"image.sysdir.1", base.string() + "/"},
-            {"abi.type", x86 ? "x86_64" : "arm64-v8a"},
+            {"abi.type", std::string(abi)},
             {"tag.id", "default"},
-            {"hw.cpu.arch", x86 ? "x86_64" : "arm64"},
+            {"hw.cpu.arch", std::string(android_avd_cpu_arch(abi))},
             {"hw.ramSize", std::to_string(memory)},
             {"hw.cpu.ncore", std::to_string(cores)},
             {"hw.gpu.enabled", "yes"},
@@ -1360,8 +1360,7 @@ Json portable_android_launch(const std::filesystem::path &root,
                  config.is_absolute() && !avd.empty() && pins.is_array(),
          "absolute Android launch paths and pins required");
     const bool frontend = !host.frontend.empty();
-    [[maybe_unused]] const std::string suffix(os::executable_suffix),
-            host_name(os::dependency_host);
+    const std::string suffix(os::executable_suffix);
     const auto machine_name = avd.starts_with("voyemu-") ? avd.substr(7) : avd;
     // Without a verified profile or an id the runtime directory is named by the machine alone.
     const auto profile_name = verified_profile.empty() ? definition.value("id", machine_name)
@@ -1426,16 +1425,18 @@ Json portable_android_launch(const std::filesystem::path &root,
     const auto base_identity = definition.contains("android")
                                        ? native_base_identity(definition.at("android"))
                                        : AndroidBaseIdentity{28, "arm64-v8a"};
-    const bool x86 = android_kvm(definition);
-
-    if (x86 && os::dependency_host != "linux/x64") {
-        throw VoyemuError("ANDROID_ACCELERATION", "x86_64 Android requires a Linux x64 KVM host");
-    }
-
+    const bool x86 = base_identity.abi == "x86_64";
+    const bool accelerated = android_hardware_acceleration(base_identity.abi) ||
+                             !diagnostic_native.empty();
     android["api"] = base_identity.api;
 
     if (x86) {
         android["guest_arch"] = base_identity.abi;
+    }
+
+    // The session confirms acceleration with the emulator before it starts such a guest.
+    if (accelerated && android_acceleration_required(definition)) {
+        android["acceleration"] = "required";
     }
 
     if (android.at("api") == 30) {
@@ -1539,15 +1540,11 @@ Json portable_android_launch(const std::filesystem::path &root,
              "selected HOME family requires its own native vehicle/display adapter; Free/Dreamer bindings cannot be reused");
     }
 
-#ifdef _WIN32
-    if (diagnostic_native.empty()) {
+    if (os::host_windows && diagnostic_native.empty()) {
         android["rendererPolicy"] = "windows-angle-36.3.10";
     }
 
-    android["args"] = Json::array({"-accel", diagnostic_native.empty() ? "off" : "on"});
-#else
-    android["args"] = Json::array({"-accel", (x86 || host_name == "darwin/arm64") ? "on" : "off"});
-#endif
+    android["args"] = Json::array({"-accel", accelerated ? "on" : "off"});
     const char *inherited_path = std::getenv("PATH");
 
     for (const auto &[key, value] :
@@ -1705,16 +1702,15 @@ void check_android_guest_identity(const Json &definition, const Json &manifest) 
     const auto &android = manifest.at("android");
     const auto identity = native_base_identity(definition.at("android"));
 
-    (void)android_kvm(definition);
+    (void)android_acceleration_required(definition);
     need(android.at("abi") == identity.abi && android.at("api") == identity.api &&
                  android.at("base_archive_sha256") == definition.at("android").at("sha256"),
          "registered clean base/API/ABI required");
 
     if (definition.contains("target") || android.contains("target")) {
-        const std::string_view name = identity.abi == "x86_64" ? "x86" : "arm";
         const auto target = definition.value("target", Json::object());
-        need(target.value("name", std::string{}) == name &&
-                     target.value("guestAbi", std::string{}) == identity.abi &&
+        const auto name = target.value("name", std::string{});
+        need(valid_profile_name(name) && target.value("guestAbi", std::string{}) == identity.abi &&
                      android.value("target", std::string{}) == name,
              "portable Android target differs from its profile snapshot");
     }

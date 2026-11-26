@@ -6,7 +6,7 @@ namespace voyemu::test {
 // Use synthetic values in the same two-boot AVB receipt shape as the signed x86 guest.
 inline void use_signed_x86_guest(Json &definition, Json &candidate) {
     definition["android"]["package"] = "system-images;android-30;default;x86_64";
-    definition["emulator"]["acceleration"] = "kvm";
+    definition["emulator"]["acceleration"] = "required";
     candidate["android"]["abi"] = "x86_64";
 
     const std::string vbmeta(64, '5'), root(64, '6');

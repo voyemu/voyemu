@@ -232,10 +232,13 @@ int main(int argc, char **argv) try {
     assert(parse({"build", profile, "--target=x86"}).build_target == "x86");
     assert(parse({"build", "--target=arm", profile, "machines/second-build"}).build_target ==
            "arm");
+    // Any name the profile declares selects a target; the profile decides which exist.
+    assert(parse({"deps", profile, "--target=synthetic-target"}).build_target ==
+           "synthetic-target");
     reject({"build", profile, "--target="}, "CLI_ARGUMENT:");
-    reject({"build", profile, "--target=arm64"}, "CLI_ARGUMENT:");
+    reject({"build", profile, "--target=../escape"}, "CLI_ARGUMENT:");
     reject({"build", profile, "--target=x86", "--target=arm"}, "CLI_ARGUMENT:");
-    reject({"deps", profile, "--target=x86"}, "CLI_ARGUMENT:");
+    reject({"fetch", profile, "--target=x86"}, "CLI_ARGUMENT:");
 
     for (const auto &path : {machine.string(), variant.string(), (root / "outside-new").string(),
                              std::string("machines/nested/new"), std::string("machines/../escape"),

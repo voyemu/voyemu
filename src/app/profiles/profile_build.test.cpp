@@ -642,18 +642,19 @@ static void artifact_resume_checks(const std::filesystem::path &root, bool equip
         const Json x86_base = {{"package", "system-images;android-30;default;x86_64"},
                                {"sha256", base_pin},
                                {"clean_base", Json::object()}};
-        write_private_json(definition,
-                           {{"schema", 1},
-                            {"id", profile},
-                            {"android", arm_base},
-                            {"emulator", Json::object()},
-                            {"targets",
-                             {{"arm", {{"guestAbi", "arm64-v8a"}, {"preparation", "sdk"}}},
-                              {"x86",
-                               {{"guestAbi", "x86_64"},
-                                {"preparation", "signed-offline"},
-                                {"androidBase", "fixture-x86"},
-                                {"emulator", {{"acceleration", "kvm"}, {"gpuMode", "host"}}}}}}}});
+        write_private_json(
+                definition,
+                {{"schema", 1},
+                 {"id", profile},
+                 {"android", arm_base},
+                 {"emulator", Json::object()},
+                 {"targets",
+                  {{"arm", {{"guestAbi", "arm64-v8a"}, {"preparation", "sdk"}}},
+                   {"x86",
+                    {{"guestAbi", "x86_64"},
+                     {"preparation", "signed-offline"},
+                     {"androidBase", "fixture-x86"},
+                     {"emulator", {{"acceleration", "required"}, {"gpuMode", "host"}}}}}}}});
         write_private_json(root / "profiles/common/android-bases/fixture-x86.json", x86_base);
         const auto selected_base = root / ".local/profiles/common/android-base" / base_pin;
         write_private_json(selected_base / "base.json",

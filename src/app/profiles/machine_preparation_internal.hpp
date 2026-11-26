@@ -28,6 +28,7 @@
 #include "portable_runtime.hpp"
 #include "process.hpp"
 #include "profile_build.hpp"
+#include "profile_catalog.hpp"
 #include "profile_identity.hpp"
 #include "profile_runtime.hpp"
 #include "progress.hpp"
@@ -400,7 +401,7 @@ struct Candidate {
             std::erase(cmd.arguments, "-writable-system");
         }
 
-        watch_verified_boot = android_kvm(profile);
+        watch_verified_boot = profile_signed_preparation(profile);
         const auto trace = android_boot_trace_arguments(std::getenv("VOYEMU_ANDROID_BOOT_TRACE"));
 
         if (watch_verified_boot && trace.empty()) {
@@ -423,13 +424,8 @@ struct Candidate {
                                  {"-feature", (it.value() == "off" ? "-" : "") + it.key()});
         }
 
-#ifdef _WIN32
-        cmd.arguments.insert(cmd.arguments.end(), {"-accel", "off"});
-#elif defined(__aarch64__) || defined(__arm64__)
-        cmd.arguments.insert(cmd.arguments.end(), {"-accel", "on"});
-#else
-        cmd.arguments.insert(cmd.arguments.end(), {"-accel", android_kvm(profile) ? "on" : "off"});
-#endif
+        const bool accelerated = android_hardware_acceleration(android_guest_abi(profile));
+        cmd.arguments.insert(cmd.arguments.end(), {"-accel", accelerated ? "on" : "off"});
 #ifdef _WIN32
         const auto machine_arguments = android_sdk_machine_arguments(true);
         cmd.arguments.insert(cmd.arguments.end(), machine_arguments.begin(),
@@ -443,6 +439,11 @@ struct Candidate {
         configure_android_wav_audio(
                 cmd, stage / ("android-audio-g" + std::to_string(boots) + ".wav"),
                 stage / ("android-no-input-g" + std::to_string(boots) + ".wav"));
+
+        if (accelerated && android_acceleration_required(profile)) {
+            require_android_acceleration(cmd);
+        }
+
         process = ChildProcess::launch(cmd);
         phase("booting");
         write_private_json(stage / "runtime.json", {{"schema", 1},

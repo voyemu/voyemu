@@ -275,61 +275,89 @@ int main(int argc, char **argv) {
             }
         }
 
-        // Copy the actual target definition and preparation recipes, while leaving the SDK and
-        // helper caches empty. The command must reach target-specific preparation or explain the
-        // missing host capability before preparing anything.
+        // Copy the actual target definitions and preparation recipes, while leaving the SDK and
+        // helper caches empty.
         {
             const std::string profile = "passion-11-russian-20260403-2.1.4.80";
             const auto source = project / "profiles" / profile;
             const auto expected = root / "profiles" / profile;
             const auto definition = read_private_json(source / "profile.json");
             write_private_json(expected / "profile.json", definition);
-            const auto base =
-                    std::filesystem::path("profiles/common/android-bases") /
-                    (definition.at("targets").at("x86").at("androidBase").get<std::string>() +
-                     ".json");
-            ensure_private_directory((root / base).parent_path());
-            std::filesystem::copy_file(project / base, root / base);
-            ensure_private_directory(expected / "targets/x86");
 
-            for (const auto *file : {"filesystems.json", "native-bridge.json"}) {
-                std::filesystem::copy_file(source / "targets/x86" / file,
-                                           expected / "targets/x86" / file);
+            for (const auto &[name, entry] : definition.at("targets").items()) {
+                if (entry.contains("androidBase")) {
+                    const auto base = std::filesystem::path("profiles/common/android-bases") /
+                                      (entry.at("androidBase").get<std::string>() + ".json");
+                    ensure_private_directory((root / base).parent_path());
+                    std::filesystem::copy_file(project / base, root / base,
+                                               std::filesystem::copy_options::skip_existing);
+                }
+
+                if (std::filesystem::is_directory(source / "targets" / name)) {
+                    ensure_private_directory(expected / "targets");
+                    std::filesystem::copy(source / "targets" / name, expected / "targets" / name,
+                                          std::filesystem::copy_options::recursive);
+                }
             }
 
             ProcessSpec spec;
             spec.executable = installed;
             spec.directory = root;
-            spec.arguments = {"build", profile, "--offline", "--lang=en"};
-            const auto result = execute_lf(spec);
-            const bool x86 = os::dependency_host == "linux/x64" && os::host_kvm_available();
-            const std::string target = x86 ? "x86" : "arm";
-            const auto machine = std::filesystem::path("machines") / (profile + "-" + target);
-            require(!result.timed_out && result.exit_code == 4,
-                    "targeted build did not stop at its fixture boundary: " + result.output);
-            const auto choice =
-                    "Selected " + target + " (" + (x86 ? "x86_64" : "arm64-v8a") + ") for ";
-            const auto verify = [&](const ProcessResult &attempt,
-                                    const std::filesystem::path &destination) {
-                require(!attempt.timed_out && attempt.exit_code == 4 &&
-                                attempt.output.starts_with(choice + destination.string() + ".\n") &&
-                                (attempt.output.find("JAVA_HELPER_ASSET_MISSING:") !=
-                                         std::string::npos ||
-                                 attempt.output.find("DOWNLOAD_OFFLINE:") != std::string::npos),
-                        "targeted build did not select its destination or reach preparation: " +
-                                attempt.output);
-            };
-            verify(result, machine);
-            const auto alternate = std::filesystem::path("machines") / "explicit-build";
-            spec.arguments.emplace_back("--target=" + target);
-            spec.arguments.emplace_back(alternate.string());
-            verify(execute_lf(spec), alternate);
-            require(!std::filesystem::exists(root / alternate),
-                    "offline targeted build published its explicit destination");
+            // Each declared target, and the default one of the host ABI, either reaches its
+            // preparation or names the missing host capability before preparing anything.
+            const auto attempt = [&](const std::string &name, bool explicit_target) {
+                const auto &entry = definition.at("targets").at(name);
+                const auto abi = entry.at("guestAbi").get<std::string>();
+                const bool translated = abi != os::host_android_abi;
+                const auto machine = std::filesystem::path("machines") /
+                                     (translated ? profile + "-" + name : profile);
+                spec.arguments = {"build", profile, "--offline", "--lang=en"};
 
-            require(!std::filesystem::exists(root / machine) &&
-                            std::filesystem::is_empty(root / ".local/machines"),
-                    "offline targeted build published a machine or started a session");
+                if (explicit_target) {
+                    spec.arguments.emplace_back("--target=" + name);
+                }
+
+                const auto result = execute_lf(spec);
+                require(!result.timed_out && result.exit_code == 4 &&
+                                (result.output.find("software translation") != std::string::npos) ==
+                                        translated,
+                        "targeted build did not stop at its fixture boundary or warn about "
+                        "translation: " +
+                                result.output);
+
+                const auto kernel = definition.at("android").value("development_kernel", Json{});
+                const bool kernel_missing = !entry.contains("developmentKernel") &&
+                                            kernel.is_object() && kernel.at("abi") != abi;
+
+                if (kernel_missing ||
+                    (entry.value("preparation", std::string{}) == "signed-offline" &&
+                     !os::host_signed_android_preparation)) {
+                    require(result.output.find("Voyemu: PROFILE_TARGET:") != std::string::npos &&
+                                    result.output.find("Preparing machine") == std::string::npos,
+                            "signed target did not name the missing host capability: " +
+                                    result.output);
+                } else {
+                    require(result.output.find("Selected " + name + " (" + abi + ") for " +
+                                               machine.string() + ".\n") != std::string::npos &&
+                                    (result.output.find("JAVA_HELPER_ASSET_MISSING:") !=
+                                             std::string::npos ||
+                                     result.output.find("DOWNLOAD_OFFLINE:") != std::string::npos),
+                            "targeted build did not select its destination or reach preparation: " +
+                                    result.output);
+                }
+
+                require(!std::filesystem::exists(root / machine) &&
+                                std::filesystem::is_empty(root / ".local/machines"),
+                        "offline targeted build published a machine or started a session");
+            };
+
+            for (const auto &[name, entry] : definition.at("targets").items()) {
+                attempt(name, true);
+
+                if (entry.at("guestAbi").get<std::string>() == os::host_android_abi) {
+                    attempt(name, false);
+                }
+            }
         }
 
         // build refuses an existing machine before any work and names the next steps; --force

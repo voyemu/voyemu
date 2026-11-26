@@ -1,6 +1,8 @@
 # passion-11-russian-20260403-2.1.4.80
 
-The Russian Voyah Passion firmware 2.1.4.80 of 3 April 2026 on Android 11. Both build targets use the same H53 firmware originals and shared recipes.
+The Russian Voyah Passion firmware 2.1.4.80 of 3 April 2026 on Android 11. Multimedia is supported, the cluster is experimental.
+
+The profile declares two [build targets](../how/profiles-machines.md#build-targets) that use the same H53 firmware originals and shared recipes.
 
 ## Guests
 
@@ -11,9 +13,9 @@ The Russian Voyah Passion firmware 2.1.4.80 of 3 April 2026 on Android 11. Both 
 
 Both targets use API 30 and the `passion-2024` steering wheel.
 
-## Linux x86_64 target
+## x86 target
 
-The `x86` target runs the multimedia on Linux x64. KVM executes the Android guest and the host GPU driver renders graphics. Preparation checks the two OEM home screens and their Android Binder services. This target includes the Voyemu MCU adapter for the battery state of charge and separate power control for each multimedia display.
+The `x86` target runs the multimedia in an x86_64 guest: with hardware acceleration on a host with an x86_64 processor, in software translation on another host. Its x86_64 [development kernel](../how/components.md#development-kernels) is not published yet, so preparation of this target stops with `PROFILE_TARGET`. Preparation checks the two OEM home screens and their Android Binder services. This target includes the Voyemu MCU adapter for the battery state of charge and separate power control for each multimedia display.
 
 Playback uses the local PulseAudio socket and microphone capture stays disabled. The default socket is `$XDG_RUNTIME_DIR/pulse/native`. To use another local socket, set `PULSE_SERVER=unix:/path/to/socket`. With no available socket Android starts without audio. The firmware sets playback volume to its minimum at cold boot. Raise it with the normal volume controls to hear sound.
 
@@ -25,7 +27,7 @@ Before signing the system image, the profile sets `ro.build.display.id` to `V2.1
 
 [Build the launcher from source](../dev/build.md) with the pinned Linux build tools, including JDK 25. Run the commands from the checkout root in a hardware-accelerated graphical session with access to `/dev/kvm` and the GPU render device. The SDK Emulator needs the Qt/X11 runtime libraries, including `libxkbfile.so.1`, `libSM.so.6` and `libICE.so.6`. Image preparation uses e2fsprogs, binutils, `jq`, `unzip` and the `openssl` command. Preparation downloads pinned tools with `curl`, extracts them with `dpkg-deb` and runs `avbtool` on Python 3.
 
-Use the local path to `OIB_8155_H53Y3632802AW.zip`. Both `deps` and `build` use the developer JDK for the [Java preparation helper](../dev/ci.md#the-java-helper-workflow) until an archive with support for build targets is pinned. The example selects `x86` explicitly. With usable KVM, omitting `--target=x86` selects the same target and output directory.
+Use the local path to `OIB_8155_H53Y3632802AW.zip`. Both `deps` and `build` use the developer JDK for the [Java preparation helper](../dev/ci.md#the-java-helper-workflow) until an archive with support for build targets is pinned. On an x86_64 host `x86` is the default target, and the machine goes to `machines/PROFILE`.
 
 Building the HAB component from source requires Android NDK r29 (`29.0.14206865`). Separately from `deps`, download the complete Linux NDK archive using the URL and SHA-256 in `sdk.archives.linux.ndk` in [`src/app/toolchain.json`](../../src/app/toolchain.json). Verify the download, extract it outside the managed SDK directory and set `NDK_HOME` to the absolute canonical path of the directory containing `source.properties`. Voyemu checks the external NDK inventory against its pin.
 
@@ -33,12 +35,12 @@ Building the HAB component from source requires Android NDK r29 (`29.0.14206865`
 profile=passion-11-russian-20260403-2.1.4.80
 firmware=/path/to/OIB_8155_H53Y3632802AW.zip
 jdk="$PWD/.local/toolchains/jdk-25.0.5+8"
-machine=machines/${profile}-x86
+machine=machines/${profile}
 export NDK_HOME=/path/to/android-ndk-r29
 
 ./voyemu deps "$profile" --jdk "$jdk"
 ./voyemu fetch "$profile" --source="$firmware"
-./voyemu build "$profile" --target=x86 --jdk "$jdk"
+./voyemu build "$profile" --jdk "$jdk"
 ./voyemu check "$machine"
 ./voyemu start "$machine"
 ./voyemu status "$machine"
@@ -64,10 +66,10 @@ src/dev/avd/run-image.sh "$RELEASE" "$PUBLIC_KEY" "$TRUSTED_SPKI_SHA256" \
 
 Import the pinned firmware archive `OIB_8155_H53Y3632802AW.zip` from a local path. `fetch` reads the OTA package inside it and extracts the shared OEM inputs for both targets. The inner TGZ can also be supplied directly under the filename in the update manifest. The command verifies its byte count and SHA-256.
 
-On Apple Silicon, build the `arm` target with the [common preparation steps](../how/preparation.md). To prepare only multimedia, select `--cluster=off`. The machine goes to `machines/passion-11-russian-20260403-2.1.4.80-arm` by default.
+The `arm` target follows the [common preparation steps](../how/preparation.md). On Apple Silicon it is the default target, and the machine goes to `machines/passion-11-russian-20260403-2.1.4.80`. On a host with an x86_64 processor `--target=arm` selects it; its guest then runs in software translation in `machines/passion-11-russian-20260403-2.1.4.80-arm`. `--cluster=off` prepares only multimedia.
 
 ```sh
-./voyemu build passion-11-russian-20260403-2.1.4.80 --target=arm --cluster=off --jdk "$jdk"
+./voyemu build passion-11-russian-20260403-2.1.4.80 --cluster=off --jdk "$jdk"
 ```
 
 ## Notes

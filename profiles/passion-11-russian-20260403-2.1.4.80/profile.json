@@ -14,9 +14,8 @@
       "androidBase": "android-30-x86_64",
       "preparation": "signed-offline",
       "emulator": {
-        "acceleration": "kvm",
+        "acceleration": "required",
         "gpuMode": "host",
-        "audioOutput": true,
         "memory": 4096
       }
     }

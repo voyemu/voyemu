@@ -30,6 +30,7 @@ The single terminology reference for Voyemu docs, README, CHANGELOG, SECURITY an
 | `guard` | A check of the exact original bytes that a recipe requires before it applies | — |
 | pin | An exact version with URL and SHA-256 for an external download, OEM input or third-party source | — |
 | prepare, preparation | Turning a profile and its OEM inputs into a machine; CLI `build PROFILE` | build a machine⁴ |
+| build target | One way to prepare a profile for one guest ABI, declared in `targets` of `profile.json` and selected with `--target`; the OEM inputs and recipes stay those of the profile | build variant |
 | machine | A prepared directory `machines/<name>/`: `runtime.json`, embedded profile and resources, boot files and writable disks | VM, instance, virtual machine, ready machine |
 | `.local` roots | The four local directories `profiles`, `toolchains`, `build` and `machines` under `.local/` | — |
 | toolchain | Pinned build tools: Zig, CMake, Ninja, JDK | — |

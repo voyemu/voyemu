@@ -57,14 +57,25 @@ namespace {
 // keeps the larger reserve of machine preparation.
 constexpr std::uint64_t preparation_margin = 2ULL << 30, build_margin = 20ULL << 30;
 
-std::string build_target_for(const Arguments &args) {
+// The build target of deps and build follows the host ABI; another target selected with --target
+// runs its guest in software translation, which the command reports before any work.
+ProfileTargetSelection build_target_for(const Arguments &args) {
     const auto file = args.root / "profiles" / args.profile / "profile.json";
     const auto declaration = std::filesystem::exists(file)
                                      ? authoring_profile(args.root, args.profile)
                                      : embedded_profile(args.profile).at("definition");
+    auto selection = select_profile_target(declaration, args.build_target, os::host_android_abi);
 
-    return select_profile_target(declaration, args.build_target, os::dependency_host,
-                                 declaration.contains("targets") && os::host_kvm_available());
+    if (selection.translated) {
+        progress::report(
+                "target_translated",
+                {{"target", selection.name},
+                 {"abi",
+                  declaration.at("targets").at(selection.name).at("guestAbi").get<std::string>()},
+                 {"host_abi", std::string(os::host_android_abi)}});
+    }
+
+    return selection;
 }
 } // namespace
 
@@ -86,7 +97,7 @@ int deps_command(const Arguments &args, const Emit &emit) {
         (void)voyemu::embedded_profile(args.profile);
     }
 
-    const auto target = args.profile.empty() ? std::string{} : build_target_for(args);
+    const auto target = args.profile.empty() ? std::string{} : build_target_for(args).name;
 
     // Each step ends with one line: already installed when the step reported nothing, installed
     // after its downloads and extractions.
@@ -210,12 +221,18 @@ int deps_command(const Arguments &args, const Emit &emit) {
 }
 
 int build_command(const Arguments &args, const Emit &emit) {
-    const auto selected = build_target_for(args);
+    const auto selection = build_target_for(args);
+    const auto &selected = selection.name;
     const auto definition = authoring_profile(args.root, args.profile, selected);
     const auto multimedia_only = profile_multimedia_only(definition);
 
     if (multimedia_only && ((args.cluster_explicit && args.cluster) || !args.multimedia)) {
         throw LocalizedError("PROFILE_TARGET", "error.profile_target_multimedia");
+    }
+
+    if (profile_signed_preparation(definition) && !os::host_signed_android_preparation) {
+        throw LocalizedError("PROFILE_TARGET", "error.profile_target_signed_host",
+                             {{"target", selected}});
     }
 
     // A profile without profile-qnx.json has no cluster, and without an installable QNX engine the
@@ -236,9 +253,10 @@ int build_command(const Arguments &args, const Emit &emit) {
         (void)voyemu::embedded_profile(args.profile);
     }
 
-    const auto identity = selected.empty() || args.machine.selected
+    const auto default_name = profile_target_machine_name(args.profile, selection);
+    const auto identity = args.machine.selected || default_name == args.profile
                                   ? args.machine
-                                  : machine_identity(args.profile, args.profile + "-" + selected);
+                                  : machine_identity(args.profile, default_name);
     const auto target = args.root / "machines" / identity.name;
     const auto machine = progress::path_text(target);
 

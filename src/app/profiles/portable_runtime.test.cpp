@@ -2843,7 +2843,8 @@ int main(int argc, char **argv) {
             Json definition = {
                     {"title", "Synthetic Kernel 1.0"},
                     {"android",
-                     {{"development_kernel",
+                     {{"package", "system-images;android-30;default;arm64-v8a"},
+                      {"development_kernel",
                        {{"url",
                          "https://github.com/voyemu/voyemu-deps/releases/download/kernel-fixture-" +
                                  sha.substr(0, 8) + "/Image"},
@@ -5188,9 +5189,28 @@ int main(int argc, char **argv) {
             auto nxp_definition = definition30;
             nxp_definition["id"] = "test-nxp";
             nxp_definition["platform"] = "qinggan09";
+            auto passion_definition = definition30;
+            passion_definition["id"] = "test-passion";
+            passion_definition["platform"] = "passion";
+            passion_definition["board"] = "8155";
+            passion_definition["configure"] = {{"home", "com.voyah.os.carlauncher"},
+                                               {"homeActivity", passion_home}};
+            passion_definition["displays"] = Json::array(
+                    {{{"role", "primary"},
+                      {"guest", "android"},
+                      {"width", 1920},
+                      {"height", 720},
+                      {"density", 160}},
+                     {{"role", "secondary"},
+                      {"guest", "android"},
+                      {"width", 1920},
+                      {"height", 720},
+                      {"density", 160}},
+                     {{"role", "hud"}, {"guest", "qnx"}, {"width", 1280}, {"height", 720}}});
+            passion_definition["emulator"]["cores"] = 4;
             {
-                auto x86 = definition30;
-                x86["emulator"]["acceleration"] = "kvm";
+                auto x86 = passion_definition;
+                x86["emulator"]["acceleration"] = "required";
                 x86["emulator"]["gpuMode"] = "host";
                 x86["emulator"]["audioOutput"] = false;
                 x86["android"] = {
@@ -5201,10 +5221,9 @@ int main(int argc, char **argv) {
                         {"sha256", std::string(64, 'a')},
                         {"features", {{"MultiDisplay", "on"}}}};
                 auto launch = [&]() {
-                    return portable_android_launch(app, PortableRuntimeHostBindings{},
-                                                   seed30 / "android", clean30,
-                                                   bound30 / "config-template.ini", free30,
-                                                   Json::array(), x86);
+                    return portable_android_launch(
+                            app, PortableRuntimeHostBindings{}, seed30 / "android", clean30,
+                            bound30 / "config-template.ini", "passion", Json::array(), x86);
                 };
 
                 auto selected = x86;
@@ -5246,32 +5265,38 @@ int main(int argc, char **argv) {
                                                        seed_metadata30) ==
                               portable_clean_boot_pins(definition30.at("android")),
                       "ARM machine unexpectedly required a local signature");
+                // Only a signed-offline target requires a signing proof; an x86_64 guest without it
+                // is prepared live.
+                check(checked_signed_android_boot_pins(app, seed30, clean_x86, prepared) ==
+                              portable_clean_boot_pins(clean_x86.at("android")),
+                      "unsigned x86_64 machine unexpectedly required a signing proof");
                 auto signed_target = clean_x86;
                 signed_target["target"] = {{"name", "x86"},
                                            {"guestAbi", "x86_64"},
                                            {"preparation", "signed-offline"},
                                            {"androidBase", "synthetic-base"}};
-
-                for (const auto &requires_signature : {clean_x86, signed_target}) {
-                    bool rejected = false;
-                    try {
-                        (void)checked_signed_android_boot_pins(app, seed30, requires_signature,
-                                                               prepared);
-                    } catch (const VoyemuError &error) {
-                        rejected = error.code() == "SIGNED_ANDROID";
-                    }
-
-                    check(rejected, "portable Android boot checks accepted missing signing proof");
+                bool rejected = false;
+                try {
+                    (void)checked_signed_android_boot_pins(app, seed30, signed_target, prepared);
+                } catch (const VoyemuError &error) {
+                    rejected = error.code() == "SIGNED_ANDROID";
                 }
 
-                if (os::dependency_host == "linux/x64") {
+                check(rejected, "portable Android boot checks accepted missing signing proof");
+
+#ifndef _WIN32
+                {
+                    // Every host starts the x86_64 guest: natively with the acceleration that the
+                    // session confirms, elsewhere in software translation.
+                    const bool native = os::host_android_abi == "x86_64";
                     const auto actual = launch();
                     check(actual.at("guest_arch") == "x86_64" &&
                                   actual.at("args").at(0) == "-accel" &&
-                                  actual.at("args").at(1) == "on" &&
+                                  actual.at("args").at(1) == (native ? "on" : "off") &&
+                                  actual.contains("acceleration") == native &&
                                   actual.at("gpuMode") == "host" &&
                                   actual.at("audioOutput") == false,
-                          "x86_64 guest requires acceleration and host graphics");
+                          "x86_64 guest acceleration follows the host ABI");
                     x86["emulator"]["audioOutput"] = true;
                     check(launch().at("audioOutput") == true,
                           "an x86_64 guest can enable host audio output");
@@ -5279,6 +5304,7 @@ int main(int argc, char **argv) {
                     check(launch().at("audioOutput") == false,
                           "an accelerated guest with unspecified audio starts silently");
                 }
+#endif
             }
             nxp_definition["board"] = "nxp";
             nxp_definition["android"] = {
@@ -5361,25 +5387,6 @@ int main(int argc, char **argv) {
 
                 check(denied, "NXP accepted foreign A9 wheel metadata");
             }
-            auto passion_definition = definition30;
-            passion_definition["id"] = "test-passion";
-            passion_definition["platform"] = "passion";
-            passion_definition["board"] = "8155";
-            passion_definition["configure"] = {{"home", "com.voyah.os.carlauncher"},
-                                               {"homeActivity", passion_home}};
-            passion_definition["displays"] = Json::array(
-                    {{{"role", "primary"},
-                      {"guest", "android"},
-                      {"width", 1920},
-                      {"height", 720},
-                      {"density", 160}},
-                     {{"role", "secondary"},
-                      {"guest", "android"},
-                      {"width", 1920},
-                      {"height", 720},
-                      {"density", 160}},
-                     {{"role", "hud"}, {"guest", "qnx"}, {"width", 1280}, {"height", 720}}});
-            passion_definition["emulator"]["cores"] = 4;
 #ifndef _WIN32
             auto passion_host = PortableRuntimeHostBindings{};
             passion_host.android_port = 5590;

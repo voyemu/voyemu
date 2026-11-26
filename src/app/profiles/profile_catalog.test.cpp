@@ -1,5 +1,6 @@
 #include "profile_catalog.hpp"
 #include "can_model_candidate_binding.hpp"
+#include "cli_messages.hpp"
 #include "model.hpp"
 #include "original_navi_candidate.hpp"
 #include "passion_presentation.hpp"
@@ -10,7 +11,9 @@
 #include <algorithm>
 #include <array>
 #include <fstream>
+#include <functional>
 #include <iostream>
+#include <map>
 #include <set>
 using namespace voyemu;
 
@@ -490,16 +493,150 @@ static void verify_qinggan11_view_graph(const std::filesystem::path &profiles) {
     }
 }
 
-static void verify_profile_target_hosts() {
-    const Json definition = {{"targets", {{"arm", {{"guestAbi", "arm64-v8a"}}},
-                                          {"x86", {{"guestAbi", "x86_64"}}}}}};
+static bool target_rejected(const std::function<void()> &call, const char *message) {
+    try {
+        call();
+    } catch (const cli::LocalizedError &error) {
+        return error.code() == "PROFILE_TARGET" &&
+               std::string(error.render(cli::Language::english)).find(message) != std::string::npos;
+    } catch (const VoyemuError &error) {
+        return error.code() == "PROFILE_TARGET" &&
+               std::string_view(error.what()).find(message) != std::string_view::npos;
+    }
 
-    // Before build targets, the ARM guest was prepared on every host, without acceleration
-    // where the host has none.
-    for (const auto *host : {"darwin/arm64", "win32/x64", "linux/x64"}) {
-        check(select_profile_target(definition, "", host, false) == "arm" &&
-                      select_profile_target(definition, "arm", host, false) == "arm",
-              "the ARM target stays available on every host");
+    return false;
+}
+
+static void verify_profile_target_hosts() {
+    // A synthetic profile with targets of two ABIs, two APIs and two preparations; the names are
+    // data, never rules.
+    const Json definition = {
+            {"schema", 1},
+            {"id", "synthetic-targets"},
+            {"android", {{"package", "system-images;android-30;default;arm64-v8a"}}},
+            {"emulator", {{"memory", 2048}}},
+            {"targets",
+             {{"native", {{"guestAbi", "arm64-v8a"}, {"preparation", "sdk"}}},
+              {"intel-api30",
+               {{"guestAbi", "x86_64"},
+                {"preparation", "signed-offline"},
+                {"androidBase", "synthetic-x86-30"},
+                {"emulator", {{"acceleration", "required"}, {"gpuMode", "host"}}}}},
+              {"intel-api28",
+               {{"guestAbi", "x86_64"},
+                {"preparation", "sdk"},
+                {"androidBase", "synthetic-x86-28"}}}}}};
+    const auto root = std::filesystem::path("/synthetic");
+    const std::map<std::filesystem::path, Json> files = {
+            {root / "profiles/synthetic-targets/profile.json", definition},
+            {root / "profiles/common/android-bases/synthetic-x86-30.json",
+             {{"package", "system-images;android-30;default;x86_64"},
+              {"clean_base", Json::object()}}},
+            {root / "profiles/common/android-bases/synthetic-x86-28.json",
+             {{"package", "system-images;android-28;default;x86_64"},
+              {"clean_base", Json::object()}}}};
+    const auto read = [&](const std::filesystem::path &file) {
+        return files.at(file).dump();
+    };
+    const auto resolved = [&](std::string_view target) {
+        return Json::parse(authoring_profile_bytes(root, "synthetic-targets", read, target));
+    };
+
+    for (const auto *name : {"native", "intel-api30", "intel-api28"}) {
+        const auto target = resolved(name);
+        const auto &declared = definition.at("targets").at(name);
+        check(target.at("target").at("name") == name &&
+                      target.at("target").at("guestAbi") == declared.at("guestAbi") &&
+                      target.at("target").at("preparation") == declared.at("preparation") &&
+                      !target.contains("targets") &&
+                      profile_signed_preparation(target) ==
+                              (declared.at("preparation") == "signed-offline"),
+              "each build target resolves its own ABI, base and preparation");
+    }
+
+    check(resolved("intel-api28").at("android").at("package") ==
+                          "system-images;android-28;default;x86_64" &&
+                  resolved("intel-api30").at("emulator") == Json{{"memory", 2048},
+                                                                 {"acceleration", "required"},
+                                                                 {"gpuMode", "host"}} &&
+                  resolved("native").at("android") == definition.at("android"),
+          "targets keep their own API, Android base and emulator settings");
+
+    // The default follows the host ABI on every host and ignores host acceleration, which the
+    // session checks when the guest starts; a host of another ABI selects any target explicitly.
+    const Json pair = {
+            {"targets",
+             {{"first", {{"guestAbi", "arm64-v8a"}}}, {"second", {{"guestAbi", "x86_64"}}}}}};
+
+    for (const auto &[host, expected] : std::array<std::pair<const char *, const char *>, 3>{
+                 {{"arm64-v8a", "first"}, {"x86_64", "second"}, {"x86_64", "second"}}}) {
+        const auto selected = select_profile_target(pair, "", host);
+        check(selected.name == expected && !selected.translated && selected.preferred &&
+                      profile_target_machine_name("synthetic-targets", selected) ==
+                              "synthetic-targets",
+              "the default target runs the host ABI in machines/PROFILE");
+    }
+
+    for (const auto *host : {"arm64-v8a", "x86_64"}) {
+        for (const auto *name : {"first", "second"}) {
+            const auto selected = select_profile_target(pair, name, host);
+            const bool translated = pair.at("targets").at(name).at("guestAbi") != host;
+            check(selected.name == name && selected.translated == translated &&
+                          selected.preferred == !translated &&
+                          profile_target_machine_name("synthetic-targets", selected) ==
+                                  (translated ? "synthetic-targets-" + std::string(name)
+                                              : std::string("synthetic-targets")),
+                  "an explicit target of another ABI is translated in its own machine");
+        }
+    }
+
+    check(target_rejected(
+                  [&] {
+                      (void)select_profile_target(definition, "", "x86_64");
+                  },
+                  "intel-api30 (x86_64)") &&
+                  target_rejected(
+                          [&] {
+                              (void)select_profile_target(pair, "", "riscv64");
+                          },
+                          "first (arm64-v8a), second (x86_64)") &&
+                  target_rejected(
+                          [&] {
+                              (void)select_profile_target(pair, "other", "x86_64");
+                          },
+                          "first (arm64-v8a)") &&
+                  target_rejected(
+                          [&] {
+                              (void)select_profile_target(Json::object(), "first", "x86_64");
+                          },
+                          "does not declare build targets"),
+          "ambiguous, missing or undeclared targets name the targets of the profile");
+    check(select_profile_target(Json::object(), "", "x86_64").name.empty() &&
+                  profile_target_machine_name("synthetic-targets", {}) == "synthetic-targets",
+          "a profile without targets keeps its machine");
+
+    auto foreign = definition;
+    foreign["targets"]["native"]["guestAbi"] = "x86_64";
+    auto host_specific = definition;
+    host_specific["targets"]["intel-api30"]["emulator"]["acceleration"] = "kvm";
+    auto audio = definition;
+    audio["targets"]["intel-api30"]["emulator"]["audioOutput"] = true;
+
+    for (const auto &[candidate, target] : std::array<std::pair<Json, const char *>, 3>{
+                 {{foreign, "native"}, {host_specific, "intel-api30"}, {audio, "intel-api30"}}}) {
+        auto changed = files;
+        changed[root / "profiles/synthetic-targets/profile.json"] = candidate;
+        check(target_rejected(
+                      [&] {
+                          (void)authoring_profile_bytes(
+                                  root, "synthetic-targets",
+                                  [&](const std::filesystem::path &file) {
+                                      return changed.at(file).dump();
+                                  },
+                                  target);
+                      },
+                      ""),
+              "a target with a foreign ABI or unknown emulator setting is rejected");
     }
 }
 
@@ -547,49 +684,43 @@ int main(int argc, char **argv) {
 
             if (original.contains("targets")) {
                 multi_target = true;
-                check(select_profile_target(original, "", "darwin/arm64", false) == "arm" &&
-                              select_profile_target(original, "", "linux/x64", true) == "x86" &&
-                              select_profile_target(original, "x86", "linux/x64", true) == "x86" &&
-                              select_profile_target(original, "arm", "darwin/arm64", false) ==
-                                      "arm",
-                      "default and explicit profile targets follow host capability");
+                const auto &targets = original.at("targets");
+                std::vector<Json> resolved;
 
-                for (const auto &[target, host] :
-                     std::array<std::pair<std::string, std::string>, 3>{{{"x86", "linux/x64"},
-                                                                         {"x86", "darwin/arm64"},
-                                                                         {"other", "linux/x64"}}}) {
-                    bool rejected = false;
+                for (const auto &[name, entry] : targets.items()) {
+                    const auto abi = entry.at("guestAbi").get<std::string>();
+                    const auto kernel = original.at("android").value("development_kernel", Json{});
 
-                    try {
-                        (void)select_profile_target(original, target, host, false);
-                    } catch (const VoyemuError &error) {
-                        rejected = std::string_view(error.what()).starts_with("PROFILE_TARGET:");
+                    // A target of another ABI than the kernel of the profile declares its own.
+                    if (!entry.contains("developmentKernel") && kernel.is_object() &&
+                        kernel.at("abi") != abi) {
+                        check(target_rejected(
+                                      [&] {
+                                          (void)authoring_profile(root, id, name);
+                                      },
+                                      "requires developmentKernel"),
+                              "a target without the kernel of its ABI was resolved");
+                        continue;
                     }
 
-                    check(rejected, "unsupported target or host cannot start preparation");
+                    resolved.push_back(authoring_profile(root, id, name));
+                    check(resolved.back().at("id") == id &&
+                                  profile_target_identity(resolved.back()).at("abi") == abi &&
+                                  select_profile_target(original, name, abi).preferred ==
+                                          (select_profile_target(original, "", abi).name == name),
+                          "each target resolves to the single catalog identity");
                 }
 
-                const auto arm = authoring_profile(root, id, "arm");
-                const auto x86 = authoring_profile(root, id, "x86");
-                check(arm.at("id") == id && x86.at("id") == id,
-                      "both targets resolve to the single catalog identity");
-                check(arm.at("android") == original.at("android") &&
-                              x86.at("android").at("package") ==
-                                      "system-images;android-30;default;x86_64" &&
-                              x86.at("android").at("sha256") != arm.at("android").at("sha256") &&
-                              profile_target_identity(arm).at("abi") == "arm64-v8a" &&
-                              profile_target_identity(x86).at("abi") == "x86_64" &&
-                              !profile_multimedia_only(arm) && profile_multimedia_only(x86) &&
-                              authoring_directory(root, id) == root / "profiles" / id,
-                      "resolved bases and scopes differ while the recipe stays shared");
+                for (const auto &target : resolved) {
+                    for (const auto *field :
+                         {"original", "identity", "patches", "components", "verify"}) {
+                        check(target.at(field) == resolved.front().at(field),
+                              "targets share OEM definition");
+                    }
 
-                for (const auto *field :
-                     {"original", "identity", "patches", "components", "verify"}) {
-                    check(arm.at(field) == x86.at(field), "targets share OEM definition");
+                    check(declared_patch_plan(target) == declared_patch_plan(resolved.front()),
+                          "targets share the exact OEM patch graph");
                 }
-
-                check(declared_patch_plan(arm) == declared_patch_plan(x86),
-                      "targets share the exact OEM patch graph");
             }
 
             const auto fonts = original.at("fonts");

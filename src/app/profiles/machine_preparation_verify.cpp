@@ -842,15 +842,15 @@ std::string avd_config(const Json &profile, const std::filesystem::path &base,
                        const std::string &avd) {
     const auto emulator = profile.at("emulator");
     const auto screens = android_screens(profile.at("displays"));
-    const bool x86 = android_kvm(profile);
+    const auto abi = android_guest_abi(profile);
     std::map<std::string, std::string> values = {
             {"AvdId", avd},
             {"avd.ini.displayname", "Voyemu preparation"},
             {"image.sysdir.1",
              base.string() + std::string(1, std::filesystem::path::preferred_separator)},
-            {"abi.type", x86 ? "x86_64" : "arm64-v8a"},
+            {"abi.type", std::string(abi)},
             {"tag.id", "default"},
-            {"hw.cpu.arch", x86 ? "x86_64" : "arm64"},
+            {"hw.cpu.arch", std::string(android_avd_cpu_arch(abi))},
             {"hw.ramSize", std::to_string(emulator.value("memory", 4096U))},
             {"hw.gpu.enabled", "yes"},
             {"hw.gpu.mode", emulator.value("gpuMode", std::string("auto"))},

@@ -575,6 +575,7 @@ public final class PreparationMain {
     private static Map<String, Object> requestedProfile(Map<String, Object> request)
             throws Exception {
         byte[] bytes = Json.str(request, "resolved_profile").getBytes(StandardCharsets.UTF_8);
+
         Failure.require(
                 bytes.length <= 1024 * 1024
                         && NativeCore.hash(bytes).equals(Json.str(request, "profile_sha256")),

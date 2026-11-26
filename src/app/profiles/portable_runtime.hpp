@@ -149,8 +149,9 @@ inline Json portable_development_kernel(const Json &definition) {
 
     if (!d.is_object() || d.size() != 4 || !d.contains("url") || !d.at("url").is_string() ||
         !d.contains("sha256") || !d.at("sha256").is_string() || !d.contains("abi") ||
-        d.at("abi") != "arm64-v8a" || !d.contains("provenance") ||
-        !d.at("provenance").is_object() || d.at("provenance").empty()) {
+        d.at("abi") != android_package_identity(android.value("package", std::string{})).abi ||
+        !d.contains("provenance") || !d.at("provenance").is_object() ||
+        d.at("provenance").empty()) {
         throw VoyemuError("PORTABLE_RUNTIME", "invalid development kernel descriptor");
     }
 

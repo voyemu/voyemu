@@ -123,11 +123,6 @@ Json launch_android_app(
 void Session::attach_android(const Json &input, bool explicit_cold_boot) {
     auto specification = input;
 
-    if (specification.value("guest_arch", std::string{}) == "x86_64" && !os::host_kvm_available()) {
-        throw VoyemuError("ANDROID_ACCELERATION",
-                          "x86_64 Android requires Linux x64 with access to /dev/kvm");
-    }
-
     if (machine_start_ && !machine_program_.empty() && specification.contains("frontend")) {
         auto &frontend = specification["frontend"];
 
@@ -561,6 +556,11 @@ void Session::attach_android(const Json &input, bool explicit_cold_boot) {
             {"schema", 1}, {"owner", session_id_}, {"console_port", port}, {"adbd_port", port + 1}};
     // The SDK selects its backend from the arguments, independently of VoyEmu presentation.
     android_sdk_headless_ = android_sdk_headless_backend(spec.arguments);
+
+    if (specification.value("acceleration", std::string{}) == "required") {
+        require_android_acceleration(spec);
+    }
+
     record_android_processes(true);
     try {
         android_ = ChildProcess::launch(spec);

@@ -69,29 +69,33 @@ int main(int argc, char **argv) {
             throw std::runtime_error("clean Android API/ABI mismatch");
         }
 
-        const auto kvm_profile = [](const Json &image) {
-            return Json{{"android", image}, {"emulator", {{"acceleration", "kvm"}}}};
+        const auto accelerated = [](const Json &image, const Json &acceleration) {
+            return Json{{"android", image}, {"emulator", {{"acceleration", acceleration}}}};
         };
 
-        if (android_kvm({{"android", api30}})) {
-            throw std::runtime_error("ARM profile unexpectedly selected KVM");
+        if (android_acceleration_required({{"android", api30}}) ||
+            !android_acceleration_required(accelerated(api30, "required")) ||
+            !android_acceleration_required(accelerated(x86, "required")) ||
+            android_guest_abi({{"android", x86}}) != "x86_64" ||
+            android_guest_abi(Json::object()) != "arm64-v8a") {
+            throw std::runtime_error("guest ABI or acceleration contract differs");
         }
 
-        if (!android_kvm(kvm_profile(x86))) {
-            throw std::runtime_error("valid x86_64 guest contract rejected");
+        bool refused = false;
+        try {
+            (void)android_acceleration_required(accelerated(x86, "kvm"));
+        } catch (const VoyemuError &) {
+            refused = true;
         }
 
-        for (const auto &profile : {kvm_profile(api30), Json{{"android", x86}}}) {
-            bool refused = false;
-            try {
-                (void)android_kvm(profile);
-            } catch (const VoyemuError &) {
-                refused = true;
-            }
+        if (!refused) {
+            throw std::runtime_error("host-specific acceleration value accepted");
+        }
 
-            if (!refused) {
-                throw std::runtime_error("incompatible or implicit KVM profile accepted");
-            }
+        // Acceleration follows the guest ABI, never a host or target name.
+        if (!android_hardware_acceleration(os::host_android_abi) ||
+            android_hardware_acceleration("unknown-abi")) {
+            throw std::runtime_error("hardware acceleration differs from the host ABI");
         }
 
         if (native_base_api(api30) != 30) {

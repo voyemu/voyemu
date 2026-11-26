@@ -79,6 +79,30 @@ int main() {
             }
         }
         const auto sdk = std::filesystem::path("fixture SDK");
+        {
+            // The emulator itself answers whether this host accelerates the guest.
+            ProcessSpec emulator;
+            emulator.executable = sdk / "emulator/emulator";
+            emulator.arguments = {"-avd", "fixture", "-accel", "on"};
+            emulator.environment["ANDROID_SDK_ROOT"] = sdk.string();
+            const auto answer = [&](ProcessResult result) {
+                return android_acceleration_usable(emulator, [&](const ProcessSpec &check) {
+                    if (check.executable != emulator.executable ||
+                        check.arguments != std::vector<std::string>{"-accel-check"} ||
+                        check.environment != emulator.environment) {
+                        throw std::runtime_error("acceleration check changed its emulator");
+                    }
+
+                    return result;
+                });
+            };
+
+            if (!answer({0, "KVM (version 12) is installed and usable.", false}) ||
+                answer({11, "/dev/kvm is not found or no access", false}) ||
+                answer({0, "", true})) {
+                throw std::runtime_error("acceleration check differs from the emulator answer");
+            }
+        }
 
         if (android_sdk_program(sdk, true) !=
             sdk / "emulator/qemu/windows-x86_64/qemu-system-aarch64.exe") {

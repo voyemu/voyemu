@@ -48,8 +48,7 @@ inline void verify(const Json &profile) {
 
     if ((profile.value("platform", Json()) != "qinggan11" &&
          profile.value("platform", Json()) != "passion") ||
-        (identity.api != 30 ||
-         (identity.abi == "x86_64" && profile.value("platform", Json()) != "passion")) ||
+        identity.api != 30 ||
         profile.value("components", Json::object()).value("view-observation", std::string{}) !=
                 "components/view-observation" ||
         std::count(entries.begin(), entries.end(), install) != 1) {

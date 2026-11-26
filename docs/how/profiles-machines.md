@@ -2,8 +2,6 @@
 
 A profile describes one firmware; a machine is what preparation makes from it. Preparation reads the profile, and launch reads only the machine. The reasons are in [profiles as sources, machines as results](../why/profiles-machines.md).
 
-A profile can offer multiple build targets for the same firmware. The [Passion profile](../profiles/passion-11-russian-20260403-2.1.4.80.md) shares its H53 OEM inputs and recipes between the `arm` and `x86` targets.
-
 ## Profile
 
 A profile is the authoring directory `profiles/<profile>/`. Its name encodes the vehicle line, the Android generation, the firmware language, the firmware date and its version, for example `free-09-chinese-20260106-6.0.3`. `voyemu list` prints the known profile identifiers; the [published profiles](../profiles/index.md) have their own pages.
@@ -26,7 +24,19 @@ The `features` field of `profile.json` turns on optional functions of the firmwa
 
 The `emulator` field of `profile.json` sets the Android emulator of the machine: `port`, `memory`, `gpuMode` and optionally `cores`. `candidatePort` fixes the port of the emulator that preparation boots to build the machine; without it, preparation takes a free port.
 
-For a multi-target profile, `targets` declares the guest ABI, preparation path and any target-specific choice of Android base. The shared OEM inputs stay under the profile ID. See [selecting a target](preparation.md#build).
+## Build targets
+
+A build target prepares one firmware for one guest ABI. The OEM inputs and recipes stay those of the profile; the `targets` field of `profile.json` names each target and declares what differs:
+
+| Field | Meaning |
+| --- | --- |
+| `guestAbi` | The Android ABI of the guest, `arm64-v8a` or `x86_64` |
+| `preparation` | `sdk` for the live preparation of the SDK image, `signed-offline` for a signed system built offline |
+| `androidBase` | A pinned Android base in `profiles/common/android-bases/` instead of the `android` base of the profile |
+| `developmentKernel` | The [development kernel](components.md#development-kernels) of the target ABI; a target of another ABI than the kernel of the profile declares its own |
+| `emulator` | Emulator settings of the target: `memory`, `gpuMode`, and `acceleration` set to `required` for a guest that needs hardware acceleration |
+
+`deps` and `build` take the target whose guest ABI is that of the host processor; `--target` selects any declared target, and a guest of another ABI runs in software translation. The files of one target live in `targets/<target>/`. The [Passion profile](../profiles/passion-11-russian-20260403-2.1.4.80.md) declares the `arm` and `x86` targets. See [selecting a target](preparation.md#build).
 
 The `wheel` field of `profile.json` names the steering-wheel artwork in `assets` and the Android key routes in `androidRoutes`; `provider` set to `com.voyemu.input.wheel` delivers the wheel to Android through that content provider of the profile instead of the routes.
 
@@ -38,7 +48,7 @@ OEM inputs never enter the repository. The user imports them into `.local/profil
 
 ## Machine
 
-A machine is a prepared directory under `machines/<name>/`. `voyemu build PROFILE` creates `machines/PROFILE` by default for a single-target profile and appends the target name for a multi-target profile. `build PROFILE machines/NAME` picks another name. The destination must be a new directory directly inside the installation's `machines/`.
+A machine is a prepared directory under `machines/<name>/`. `voyemu build PROFILE` creates `machines/PROFILE` by default, also for the build target of the host ABI; a target of another ABI creates `machines/PROFILE-TARGET`. `build PROFILE machines/NAME` picks another name. The destination must be a new directory directly inside the installation's `machines/`.
 
 | Path | Content |
 | --- | --- |

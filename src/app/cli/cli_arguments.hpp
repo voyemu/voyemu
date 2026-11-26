@@ -188,8 +188,12 @@ inline Arguments parse(int argc, char **argv, const std::filesystem::path &execu
         if (option.starts_with("--target=")) {
             const auto target = option.substr(9);
 
-            if (result.command != "build" || (target != "arm" && target != "x86")) {
-                throw VoyemuError("CLI_ARGUMENT", "build requires --target=arm or --target=x86");
+            if (result.command != "deps" && result.command != "build") {
+                throw LocalizedError("CLI_ARGUMENT", "error.target_scope");
+            }
+
+            if (!voyemu::valid_profile_name(target)) {
+                throw LocalizedError("CLI_ARGUMENT", "error.target_name", {{"target", target}});
             }
 
             result.build_target = target;

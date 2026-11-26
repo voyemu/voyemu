@@ -14,9 +14,25 @@ authoring_profile_bytes(const std::filesystem::path &root, std::string_view prof
                         std::string_view target = {});
 Json authoring_profile(const std::filesystem::path &root, std::string_view profile,
                        std::string_view target = {});
-std::string select_profile_target(const Json &definition, std::string_view requested,
-                                  std::string_view host, bool kvm_available);
+// The build target that deps and build prepare. name is empty for a profile without targets;
+// translated tells a guest ABI that the host runs in software translation; preferred tells the
+// only target whose guest ABI is the host ABI.
+struct ProfileTargetSelection {
+    std::string name;
+    bool translated = false, preferred = false;
+};
+// Without a requested name, the only target whose guestAbi is host_abi; any declared target when
+// requested. Neither, or several matching targets, stop with PROFILE_TARGET and the target list.
+ProfileTargetSelection select_profile_target(const Json &definition, std::string_view requested,
+                                             std::string_view host_abi);
+// The default machine of a profile is machines/PROFILE, also for its preferred build target;
+// another target names machines/PROFILE-TARGET. CLI and Voyemu API share this rule.
+std::string profile_target_machine_name(std::string_view profile,
+                                        const ProfileTargetSelection &selection);
 Json profile_target_identity(const Json &definition);
+// Whether the resolved build target prepares a signed system offline.
+bool profile_signed_preparation(const Json &definition);
+// A target prepared offline has no cluster yet.
 bool profile_multimedia_only(const Json &definition);
 // The authoring directory profiles/PROFILE of a valid profile id.
 std::filesystem::path authoring_directory(const std::filesystem::path &root,

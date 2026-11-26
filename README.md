@@ -17,7 +17,7 @@ Voyemu runs on macOS 15+ with Apple Silicon, on Windows x64 and on Linux x64 wit
 | `free-09-chinese-20260106-6.0.3` | Free 6.0.3, supported. Both multimedia screens and the QNX cluster, Android checkpoint restore, USB Music, DVR, the synthetic phone scenario and the OEM light/dark theme |
 | `free-11-chinese-20260731-7.3.1` | Free 7.3.1, supported. Multimedia and cluster, Classic, Minimalist and Speedy Dash themes, AEB states, USB Music, DVR, Settings and the synthetic phone scenario. OEM navigation requires activation |
 | `free-11-russian-20260318-rc1` | Free Sport+ 2026-03-18 RC1, experimental. Multimedia only from the Russian partition snapshot, which has no QNX images. No OEM theme or navigation in the snapshot |
-| `passion-11-russian-20260403-2.1.4.80` | Passion, multimedia on `arm` and on Linux x86_64 with KVM (`x86`). The `arm` target also has an experimental QNX cluster. The Russian firmware has no OEM navigation application |
+| `passion-11-russian-20260403-2.1.4.80` | Passion, supported for multimedia: both OEM home screens, the synthetic phone scenario, steering-wheel controls, USB Music and Camera. The QNX cluster is experimental. The Russian firmware has no OEM navigation application |
 | `free-11-chinese-20250710-6.11.1` | Free 6.11.1, supported. Multimedia and cluster |
 | `free-09-chinese-20221230-nxp-rc45` | Free NXP RC45, supported. Multimedia only; the profile has no cluster. OEM navigation requires activation |
 

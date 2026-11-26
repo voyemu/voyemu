@@ -1,4 +1,5 @@
 #include "profile_catalog.hpp"
+#include "base_image.hpp"
 #include "check.hpp"
 #include "cli_messages.hpp"
 #include "embedded_data.hpp"
@@ -28,45 +29,55 @@ std::string profile_bytes(const std::filesystem::path &file) {
     return bytes;
 }
 
+bool only_fields(const Json &object, std::initializer_list<std::string_view> fields) {
+    if (!object.is_object()) {
+        return false;
+    }
+
+    for (auto it = object.begin(); it != object.end(); ++it) {
+        if (std::find(fields.begin(), fields.end(), it.key()) == fields.end()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Each build target declares its guest ABI and preparation; androidBase replaces the Android base
+// of the profile with a pinned one of profiles/common/android-bases, developmentKernel the kernel
+// of its ABI, and emulator adds settings. The OEM import and recipes stay those of the profile.
 Json resolve_target(Json definition, std::string_view name,
                     const std::function<Json(const std::string &)> &read_base) {
     const Check need{"PROFILE_TARGET"};
     const auto &targets = definition.at("targets");
 
-    need(targets.is_object() && targets.size() == 2 && targets.contains("arm") &&
-                 targets.contains("x86") && (name == "arm" || name == "x86") &&
-                 !definition.contains("target") &&
-                 definition.at("android").value("package", std::string{}) ==
-                         "system-images;android-30;default;arm64-v8a",
-         "invalid Android target catalogue");
-    const auto entry = targets.at(name);
-    const bool x86 = name == "x86";
-    const auto abi = x86 ? "x86_64" : "arm64-v8a";
-    const auto preparation = x86 ? "signed-offline" : "sdk";
-    need(entry.is_object() && entry.size() == (x86 ? 4U : 2U) &&
-                 entry.value("guestAbi", std::string{}) == abi &&
-                 entry.value("preparation", std::string{}) == preparation,
-         "target ABI or preparation differs");
+    need(targets.is_object() && targets.contains(name) && !definition.contains("target"),
+         "invalid build target catalogue");
+    const auto entry = targets.at(std::string(name));
+    need(only_fields(entry,
+                     {"guestAbi", "preparation", "androidBase", "developmentKernel", "emulator"}),
+         "unknown build target field");
+    const auto abi = entry.value("guestAbi", std::string{}),
+               preparation = entry.value("preparation", std::string{});
+    need((abi == "arm64-v8a" || abi == "x86_64") &&
+                 (preparation == "sdk" || preparation == "signed-offline"),
+         "build target requires a supported guest ABI and preparation");
     Json target = {{"name", name}, {"guestAbi", abi}, {"preparation", preparation}};
+    // A development kernel boots one ABI; a target of another ABI never falls back to the stock
+    // kernel of its base silently.
+    auto kernel = entry.value("developmentKernel",
+                              definition.at("android").value("development_kernel", Json{}));
+    need(kernel.is_null() || (kernel.is_object() && kernel.value("abi", std::string{}) == abi),
+         "build target " + std::string(name) + " runs an " + abi +
+                 " guest and requires developmentKernel of that ABI");
 
-    if (x86) {
+    if (entry.contains("androidBase")) {
         const auto base_name = entry.value("androidBase", std::string{});
-        const auto emulator = entry.value("emulator", Json::object());
-        const auto memory = emulator.is_object() ? emulator.value("memory", Json(4096)) : Json{};
-        need(valid_profile_name(base_name) && emulator.is_object() &&
-                     emulator.size() ==
-                             2U + emulator.contains("memory") + emulator.contains("audioOutput") &&
-                     emulator.value("acceleration", std::string{}) == "kvm" &&
-                     emulator.value("gpuMode", std::string{}) == "host" &&
-                     emulator.value("audioOutput", Json(false)).is_boolean() &&
-                     memory.is_number_integer() && memory >= 512 && memory <= 16384,
-             "invalid x86 base or emulator settings");
+        need(valid_profile_name(base_name), "build target requires a valid Android base name");
         auto base = read_base(base_name);
-        need(base.is_object() &&
-                     base.value("package", std::string{}) ==
-                             "system-images;android-30;default;x86_64" &&
-                     base.contains("clean_base") && !base.contains("development_kernel"),
-             "x86 target requires a pinned API30 SDK base");
+        need(base.is_object() && base.contains("clean_base") &&
+                     !base.contains("development_kernel"),
+             "build target requires a pinned stock Android base");
         const auto features = definition.at("android").value("features", Json::object());
 
         if (!features.empty()) {
@@ -74,8 +85,28 @@ Json resolve_target(Json definition, std::string_view name,
         }
 
         definition["android"] = std::move(base);
-        definition["emulator"].update(emulator);
         target["androidBase"] = base_name;
+    }
+
+    need(android_package_identity(definition.at("android").value("package", std::string{})).abi ==
+                 abi,
+         "build target ABI differs from its Android base");
+
+    if (kernel.is_null()) {
+        definition["android"].erase("development_kernel");
+    } else {
+        definition["android"]["development_kernel"] = std::move(kernel);
+    }
+
+    if (entry.contains("emulator")) {
+        const auto &emulator = entry.at("emulator");
+        const auto memory = emulator.is_object() ? emulator.value("memory", Json(4096)) : Json{};
+        need(only_fields(emulator, {"acceleration", "gpuMode", "memory"}) &&
+                     emulator.value("acceleration", Json("required")) == "required" &&
+                     emulator.value("gpuMode", Json("host")).is_string() &&
+                     memory.is_number_integer() && memory >= 512 && memory <= 16384,
+             "invalid build target emulator settings");
+        definition["emulator"].update(emulator);
     }
 
     definition.erase("targets");
@@ -129,8 +160,22 @@ Json authoring_profile(const std::filesystem::path &root, std::string_view name,
     return Json::parse(authoring_profile_bytes(root, name, target));
 }
 
-std::string select_profile_target(const Json &definition, std::string_view requested,
-                                  std::string_view host, bool kvm_available) {
+namespace {
+// The build targets of a profile for messages, in catalog order.
+std::string profile_target_list(const Json &targets) {
+    std::string result;
+
+    for (const auto &[name, entry] : targets.items()) {
+        result += (result.empty() ? "" : ", ") + name + " (" +
+                  entry.value("guestAbi", std::string{}) + ")";
+    }
+
+    return result;
+}
+} // namespace
+
+ProfileTargetSelection select_profile_target(const Json &definition, std::string_view requested,
+                                             std::string_view host_abi) {
     if (!definition.contains("targets")) {
         if (!requested.empty()) {
             throw cli::LocalizedError("PROFILE_TARGET", "error.profile_target_single");
@@ -140,28 +185,50 @@ std::string select_profile_target(const Json &definition, std::string_view reque
     }
 
     const auto &targets = definition.at("targets");
-    const auto selected =
-            requested.empty() ? (host == "linux/x64" && kvm_available ? "x86" : "arm") : requested;
 
-    if (!targets.is_object() || !targets.contains(selected)) {
-        throw cli::LocalizedError("PROFILE_TARGET", "error.profile_target_missing",
-                                  {{"target", std::string(selected)}});
+    if (!targets.is_object() || targets.empty()) {
+        throw VoyemuError("PROFILE_TARGET", "invalid build target catalogue");
     }
 
-    if (selected == "arm") {
-        return "arm";
-    }
+    std::string preferred;
+    unsigned matching = 0;
 
-    if (selected == "x86" && host == "linux/x64") {
-        if (!kvm_available) {
-            throw cli::LocalizedError("PROFILE_TARGET", "error.profile_target_kvm");
+    for (const auto &[name, entry] : targets.items()) {
+        if (entry.is_object() && entry.value("guestAbi", std::string{}) == host_abi) {
+            preferred = name;
+            ++matching;
         }
-
-        return "x86";
     }
 
-    throw cli::LocalizedError("PROFILE_TARGET", "error.profile_target_host",
-                              {{"target", std::string(selected)}, {"host", std::string(host)}});
+    if (matching != 1) {
+        preferred.clear();
+    }
+
+    const std::string selected = requested.empty() ? preferred : std::string(requested);
+
+    if (selected.empty()) {
+        throw cli::LocalizedError(
+                "PROFILE_TARGET", "error.profile_target_default",
+                {{"abi", std::string(host_abi)}, {"targets", profile_target_list(targets)}});
+    }
+
+    if (!targets.contains(selected)) {
+        throw cli::LocalizedError(
+                "PROFILE_TARGET", "error.profile_target_missing",
+                {{"target", selected}, {"targets", profile_target_list(targets)}});
+    }
+
+    return {selected, targets.at(selected).value("guestAbi", std::string{}) != host_abi,
+            selected == preferred};
+}
+
+std::string profile_target_machine_name(std::string_view profile,
+                                        const ProfileTargetSelection &selection) {
+    if (selection.name.empty() || selection.preferred) {
+        return std::string(profile);
+    }
+
+    return std::string(profile) + "-" + selection.name;
 }
 
 Json profile_target_identity(const Json &definition) {
@@ -176,13 +243,13 @@ Json profile_target_identity(const Json &definition) {
             {"base_sha256", definition.at("android").at("sha256")}};
 }
 
-bool profile_multimedia_only(const Json &definition) {
-    const auto target = definition.value("target", Json::object());
+bool profile_signed_preparation(const Json &definition) {
+    return definition.value("target", Json::object()).value("preparation", std::string{}) ==
+           "signed-offline";
+}
 
-    return target.value("name", std::string{}) == "x86" &&
-           target.value("guestAbi", std::string{}) == "x86_64" &&
-           target.value("preparation", std::string{}) == "signed-offline" &&
-           valid_profile_name(target.value("androidBase", std::string{}));
+bool profile_multimedia_only(const Json &definition) {
+    return profile_signed_preparation(definition);
 }
 
 const Json &embedded_profile_catalog() {
@@ -262,9 +329,11 @@ Json declared_patch_plan(const Json &definition) {
     }
 
     const auto android = definition.value("android", Json::object());
-    const bool native_api28 =
-            android.is_object() &&
-            android.value("package", std::string{}).starts_with("system-images;android-28;");
+    const auto base_api =
+            android.is_object()
+                    ? android_package_identity(android.value("package", std::string{})).api
+                    : 0U;
+    const bool native_api28 = base_api == 28, api30 = base_api == 30;
     const bool original_navi = original_navi_requested(definition);
 
     if (original_navi || free731_usb_test_volume_visibility(definition)) {
@@ -296,16 +365,8 @@ Json declared_patch_plan(const Json &definition) {
                                              ProfileBoard::sa8155);
         const bool secondary_binding = (qinggan11 && id == "api30-secondary-navigation") ||
                                        (passion && id == "passion-api30-secondary-navigation");
-        const auto package = android.value("package", std::string{});
-        const bool secondary_sdk =
-                package == "system-images;android-30;default;arm64-v8a" ||
-                (passion && package == "system-images;android-30;default;x86_64" &&
-                 profile_multimedia_only(definition) &&
-                 !runtime_profile_reference(definition).empty() &&
-                 definition.at("emulator").value("acceleration", std::string{}) == "kvm" &&
-                 definition.at("emulator").value("gpuMode", std::string{}) == "host");
         const bool secondary_jar =
-                secondary_binding && secondary_sdk &&
+                secondary_binding && api30 &&
                 (patch == Json{{"type", "jar"},
                                {"input", "android:/system/framework/services.jar"},
                                {"steps", Json::array({id + ".json"})}} ||
@@ -321,18 +382,14 @@ Json declared_patch_plan(const Json &definition) {
                                                        "passion-api30-display-power.json",
                                                        "passion-api30-startup-volume.json"})}}));
         const bool audio_consumer_jar =
-                qinggan11 && id == "QGAPI" &&
-                android.value("package", std::string{}) ==
-                        "system-images;android-30;default;arm64-v8a" &&
+                qinggan11 && id == "QGAPI" && api30 &&
                 qinggan11_pinned_original(definition.value("original", Json::object())
                                                   .value("QGAPI", Json::object())) &&
                 patch == Json{{"type", "jar"},
                               {"input", "original:QGAPI"},
                               {"steps", Json::array({"api30-audio-consumer.json"})}};
         const bool original_jar =
-                original_navi &&
-                android.value("package", std::string{}) ==
-                        "system-images;android-30;default;arm64-v8a" &&
+                original_navi && api30 &&
                 (patch == Json{{"type", "jar"},
                                {"input", "component:view-observation"},
                                {"steps", Json::array({"original-navi-egl.json"})}} ||

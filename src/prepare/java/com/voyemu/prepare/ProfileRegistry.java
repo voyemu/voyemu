@@ -170,8 +170,7 @@ final class ProfileRegistry {
                     continue;
                 } // Draft profiles have no executable definition.
 
-                Map<String, Object> data =
-                        resolved == null ? readDefinition(definition) : resolved;
+                Map<String, Object> data = resolved == null ? readDefinition(definition) : resolved;
                 String status = (String) data.getOrDefault("status", "ready");
 
                 if (!"ready".equals(status)

@@ -1,14 +1,43 @@
 #pragma once
 #include "error.hpp"
 #include "os/platform.hpp"
+#include "process.hpp"
 #include <algorithm>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 namespace voyemu {
+// The pinned emulator reports whether this host accelerates its guest: with the environment of the
+// launch, -accel-check exits 0 when the hypervisor is usable and with another code, such as 11
+// without access to it, otherwise.
+inline bool
+android_acceleration_usable(const ProcessSpec &emulator,
+                            const std::function<ProcessResult(const ProcessSpec &)> &run) {
+    auto check = emulator;
+
+    check.arguments = {"-accel-check"};
+    check.output.clear();
+    check.detached = false;
+    const auto result = run(check);
+
+    return !result.timed_out && result.exit_code == 0;
+}
+
+// The guest of a machine that requires acceleration starts only where the emulator confirms it.
+inline void require_android_acceleration(const ProcessSpec &emulator) {
+    if (!android_acceleration_usable(emulator, [](const ProcessSpec &check) {
+            return execute(check, 60000, 16 * 1024);
+        })) {
+        throw VoyemuError("ANDROID_ACCELERATION",
+                          "the pinned emulator found no usable hardware acceleration for this "
+                          "guest (-accel-check)");
+    }
+}
+
 inline bool android_sdk_headless_backend(const std::vector<std::string> &arguments) {
     const auto options_end = std::find(arguments.begin(), arguments.end(), "-qemu");
 

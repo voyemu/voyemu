@@ -17,6 +17,7 @@ public final class PreparationMainTest {
             throws Exception {
         String id = recipe.getFileName().toString();
         Map<String, Object> definition = new LinkedHashMap<>(original);
+
         definition.put(
                 "targets",
                 Map.of(

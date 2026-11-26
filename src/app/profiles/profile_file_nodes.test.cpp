@@ -135,6 +135,10 @@ int main(int argc, char **argv) {
             definition["id"] = id;
             const auto first = api30_file_recipes_for_profile(definition).front().id;
             definition["patches"][first]["input"] = "android:/system/foreign";
+            // The fixture target declares the kernel of its ABI, which the published one lacks.
+            auto kernel = definition.at("android").at("development_kernel");
+            kernel["abi"] = "x86_64";
+            definition["targets"]["x86"]["developmentKernel"] = kernel;
             write_private_json(root / "profiles" / id / "profile.json", definition);
             const auto base_name =
                     definition.at("targets").at("x86").at("androidBase").get<std::string>();

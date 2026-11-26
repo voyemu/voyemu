@@ -61,11 +61,9 @@ inline std::string cli_help(cli::Language language = cli::Language::english) {
              {"fetch PROFILE", "help.fetch", {}},
              {"fetch PROFILE --source=FILE", "help.fetch_archive", {}},
              {"fetch PROFILE --source=adb --serial SERIAL", "help.fetch_adb", {}},
-             {"build PROFILE [MACHINE_PATH] [--target=arm|x86]",
+             {"build PROFILE [MACHINE_PATH] [--target=TARGET]",
               "help.build",
-              {{"default", "machines/PROFILE"},
-               {"arm", "machines/PROFILE-arm"},
-               {"x_path", "machines/PROFILE-x86"}}}});
+              {{"default", "machines/PROFILE"}, {"other", "machines/PROFILE-TARGET"}}}});
     heading("help.subsystems");
     entries({{"--cluster=on|off", "help.cluster", {}},
              {"--multimedia=on|off", "help.multimedia", {}}});

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "android_reboot.hpp"
+#include "base_image.hpp"
 #include "check.hpp"
 #include "model.hpp"
 #include <algorithm>
@@ -16,11 +17,10 @@ inline std::string passion_prepared_guest_abi(const Json &definition, const Json
     }
 
     need(package == "system-images;android-30;default;x86_64" &&
-                 definition.value("emulator", Json::object()).value("acceleration", Json{}) ==
-                         "kvm" &&
+                 android_acceleration_required(definition) &&
                  candidate.at("android").at("abi") == "x86_64" &&
                  candidate.contains("signed_android"),
-         "x86_64 requires the signed API30 KVM guest");
+         "x86_64 requires the signed API30 guest with hardware acceleration");
     const auto &proof = candidate.at("signed_android");
     need(proof.is_object() && proof.size() == 10 &&
                  proof.at("base_archive_sha256") == base.at("sha256"),

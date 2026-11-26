@@ -396,14 +396,17 @@ std::filesystem::path bind_machine_configuration(const std::filesystem::path &ro
 
         const auto launch = read_private_json(directory / "android-launch.json");
 
-        if (android_kvm(retained_definition) &&
-            (launch.value("guest_arch", std::string{}) != "x86_64" ||
+        const auto abi = android_guest_abi(retained_definition);
+
+        if (abi == "x86_64" &&
+            (launch.value("guest_arch", std::string{}) != abi ||
              launch.value("audioOutput", true) !=
                      android_launch_audio_output(retained_definition.at("emulator"), true) ||
              launch.value("gpuMode", std::string{}) !=
                      retained_definition.at("emulator").value("gpuMode", std::string("host")) ||
              !launch.contains("args") || launch.at("args").size() < 2 ||
-             launch.at("args")[0] != "-accel" || launch.at("args")[1] != "on")) {
+             launch.at("args")[0] != "-accel" ||
+             launch.at("args")[1] != (android_hardware_acceleration(abi) ? "on" : "off"))) {
             return false;
         }
 

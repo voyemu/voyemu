@@ -294,7 +294,7 @@ static void owner_fetch_sequence(const std::filesystem::path &project) {
                             {{"guestAbi", "x86_64"},
                              {"preparation", "signed-offline"},
                              {"androidBase", "owner-sequence-x86"},
-                             {"emulator", {{"acceleration", "kvm"}, {"gpuMode", "host"}}}}}};
+                             {"emulator", {{"acceleration", "required"}, {"gpuMode", "host"}}}}}};
     write_private_json(selected / "profile.json", targeted);
     const auto x86_pin = sha256_bytes("x86-archive");
     write_private_json(root / "profiles/common/android-bases/owner-sequence-x86.json",

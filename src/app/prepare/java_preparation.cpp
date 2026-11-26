@@ -583,12 +583,10 @@ static Json request_document(const std::filesystem::path &root,
              "native component receipt differs from its pin");
         pinned(item.receipt.parent_path() / proof.at("output").get<std::string>(),
                proof.at("sha256").get<std::string>());
-        components[id] = {{"receipt", item.receipt.string()},
-                          {"receipt_sha256", item.receipt_sha256},
-                          {"output_type", output_type},
-                          {"abi", abi},
-                          {"output", proof.at("output")},
-                          {"sha256", proof.at("sha256")}};
+        components[id] = {
+                {"receipt", item.receipt.string()}, {"receipt_sha256", item.receipt_sha256},
+                {"output_type", output_type},       {"abi", abi},
+                {"output", proof.at("output")},     {"sha256", proof.at("sha256")}};
     }
 
     need(components.size() == b.native_components.size(), "undeclared native component rejected");

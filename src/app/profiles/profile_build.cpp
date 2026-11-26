@@ -62,9 +62,10 @@ SignedAndroidInput build_signed_profile_image(const std::filesystem::path &root,
                                               std::string_view profile, const Json &definition,
                                               const ProfilePreparationArtifacts &artifacts,
                                               bool offline, SignedImageBuild &build) {
-#ifndef __linux__
-    throw VoyemuError("SIGNED_ANDROID", "signed Android preparation requires Linux");
-#endif
+    if (!os::host_signed_android_preparation) {
+        throw VoyemuError("SIGNED_ANDROID", "signed Android preparation requires Linux");
+    }
+
     const auto recipes = signed_filesystem_recipe(root, profile, definition).parent_path();
     const auto bridge = recipes / "native-bridge.json";
     const auto filesystem_recipe = read_private_json(recipes / "filesystems.json", 128 * 1024);
@@ -73,7 +74,7 @@ SignedAndroidInput build_signed_profile_image(const std::filesystem::path &root,
          "buildDisplayId must be a string");
     const auto &selection = definition.at("target");
     const auto base_name = selection.at("androidBase").get<std::string>();
-    need(valid_profile_name(base_name) && android_kvm(definition),
+    need(valid_profile_name(base_name) && android_guest_abi(definition) == "x86_64",
          "offline Android image requires a target with a registered x86_64 SDK base");
     const auto base = root / "profiles/common/android-bases" / (base_name + ".json");
     const auto scripts = signed_android_tools(root);
@@ -443,12 +444,12 @@ std::map<std::string, std::string> host_pins(const std::filesystem::path &sdk,
          {sdk / "emulator" / ("emulator" + exe()), sdk / "platform-tools" / ("adb" + exe()),
           sdk / "build-tools/36.1.0" / ("aapt2" + exe()), sdk / "emulator" / ("qemu-img" + exe()),
           sdk / "emulator" / "qemu" / backend_host() /
-                  ((android_kvm(definition) ? "qemu-system-x86_64" : "qemu-system-aarch64") +
+                  ("qemu-system-" + std::string(android_qemu_arch(android_guest_abi(definition))) +
                    exe())}) {
         pins[file.string()] = hash(file, 512ULL << 20);
     }
 
-    if (android_kvm(definition)) {
+    if (android_guest_abi(definition) == "x86_64") {
         const auto headless = sdk / "emulator/qemu" / backend_host() /
                               "qemu-system-x86_64-headless";
         pins[headless.string()] = hash(headless, 512ULL << 20);
