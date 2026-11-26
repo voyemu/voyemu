@@ -501,10 +501,12 @@ struct Candidate {
             owner();
             const auto output = trim(result.output);
 
+            const auto missing_device = "device '" + adb_binding.serial() + "' not found";
+
             if (transitioning && !result.timed_out && result.exit_code == 1 &&
                 (output == "error: device offline" || output == "adb: device offline" ||
-                 output == "error: closed" ||
-                 output == "error: device '" + adb_binding.serial() + "' not found")) {
+                 output == "error: closed" || output == "error: " + missing_device ||
+                 output == "adb: " + missing_device)) {
                 return std::nullopt;
             }
 
