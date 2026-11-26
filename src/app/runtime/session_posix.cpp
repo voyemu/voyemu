@@ -8,12 +8,14 @@ using namespace session_detail;
 namespace session_detail {
 std::filesystem::path session_sdk_registration_directory(const std::filesystem::path &directory,
                                                          bool) {
-    const auto home = directory / "emulator-home";
+    // The SDK registers its emulator below the discovery root in the environment of the child.
+    ProcessSpec sdk;
 
-    // The Linux SDK registers its emulator in the XDG_RUNTIME_DIR of the child.
-    const auto root = os::platform_name == "Linux" ? directory / "tmp" : home;
+    android_session_environment(sdk, directory);
+    const std::filesystem::path root =
+            sdk.environment.at(std::string(os::sdk_discovery_root_variable));
 
-    return sdk_registration_directory(root, home);
+    return sdk_registration_directory(root, directory / "emulator-home");
 }
 
 bool android_windows_renderer(const Json &, bool) {

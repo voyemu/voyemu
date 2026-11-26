@@ -117,12 +117,18 @@ static void warm_sdk_descriptor_binding() {
 int main() try {
     warm_sdk_descriptor_binding();
 
-    if constexpr (os::platform_name == "Linux") {
+    {
+        // The session looks for the registration where its SDK child writes it.
         const auto session = std::filesystem::absolute("isolated-session");
         ProcessSpec sdk;
         android_session_environment(sdk, session);
+        const std::filesystem::path root =
+                sdk.environment.at(std::string(os::sdk_discovery_root_variable));
         assert(session_detail::session_sdk_registration_directory(session, false) ==
-               std::filesystem::path(sdk.environment.at("XDG_RUNTIME_DIR")) / "avd/running");
+               root / (os::platform_name == "macOS" ? "Library/Caches/TemporaryItems/avd/running"
+                       : os::host_windows           ? "Temp/avd/running"
+                                                    : "avd/running"));
+        assert(os::platform_name != "Linux" || root == session / "tmp");
     }
 
     const auto os_root = std::filesystem::absolute("sdk-user"),

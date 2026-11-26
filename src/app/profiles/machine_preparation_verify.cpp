@@ -754,13 +754,7 @@ Json capture_candidate_frames(Candidate &c, const Json &profile) {
                displays = c.shell({"dumpsys", "display"});
     const auto second = android_candidate_secondary_display_ready(profile, displays, windows);
     need(second.has_value(), "secondary window/display must remain ready for native capture");
-#ifdef __APPLE__
-    const auto os_root = std::getenv("HOME");
-#elif defined(_WIN32)
-    const auto os_root = std::getenv("LOCALAPPDATA");
-#else
-    const auto os_root = std::getenv("XDG_RUNTIME_DIR");
-#endif
+    const auto os_root = std::getenv(std::string(os::sdk_discovery_root_variable).c_str());
     const auto registration = sdk_registration_directory(os_root ? os_root : "",
                                                          c.stage / "emulator-home");
     const auto grpc = c.port + 30000;

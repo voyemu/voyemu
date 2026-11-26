@@ -62,6 +62,15 @@ inline constexpr std::string_view shared_library_suffix = ".dylib";
 #else
 inline constexpr std::string_view shared_library_suffix = ".so";
 #endif
+// The environment variable that names the root of the registrations of running Android Emulator
+// instances, the ConfigDirs::getDiscoveryDirectory of the SDK.
+#if defined(_WIN32)
+inline constexpr std::string_view sdk_discovery_root_variable = "LOCALAPPDATA";
+#elif defined(__APPLE__)
+inline constexpr std::string_view sdk_discovery_root_variable = "HOME";
+#else
+inline constexpr std::string_view sdk_discovery_root_variable = "XDG_RUNTIME_DIR";
+#endif
 // Whether the host is Windows, for interfaces that take the host as a value.
 inline constexpr bool host_windows = platform_name == "Windows";
 // The key of the build tools of this host in the optionalTools of toolchain.json.
