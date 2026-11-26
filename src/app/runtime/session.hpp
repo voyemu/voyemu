@@ -135,7 +135,6 @@ struct ThemeState {
 };
 int binder_integer(const std::string &reply);
 Json parse_android_provider_reply(const std::string &reply);
-bool sdk_display_ready(std::string_view dump, unsigned id, unsigned width, unsigned height);
 std::optional<unsigned> secondary_display_ready(const std::string &displays,
                                                 const std::string &windows);
 std::optional<unsigned> passion_secondary_display_ready(const std::string &displays,

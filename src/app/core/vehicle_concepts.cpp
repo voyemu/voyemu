@@ -296,11 +296,10 @@ const ConceptDefinition &concept_definition(VehicleConcept id) {
 
 const std::vector<ConceptBinding> &concept_bindings(VehicleCatalog catalog) {
     static const auto bindings = [] {
-        return std::array<std::vector<ConceptBinding>, 4>{
+        return std::array<std::vector<ConceptBinding>, 3>{
                 checked(VehicleCatalog::qinggan09, qinggan09_bindings()),
                 checked(VehicleCatalog::qinggan11, qinggan11_bindings()),
-                checked(VehicleCatalog::passion, passion_bindings()),
-                {}};
+                checked(VehicleCatalog::passion, passion_bindings())};
     }();
 
     return bindings.at(static_cast<std::size_t>(catalog));
@@ -318,7 +317,7 @@ const ConceptBinding *concept_binding(VehicleCatalog catalog, VehicleConcept id)
 
 const ConceptBinding *field_binding(VehicleCatalog catalog, std::string_view field) {
     static const auto indexes = [] {
-        std::array<std::map<std::string, const ConceptBinding *, std::less<>>, 4> result;
+        std::array<std::map<std::string, const ConceptBinding *, std::less<>>, 3> result;
 
         for (const auto which :
              {VehicleCatalog::qinggan09, VehicleCatalog::qinggan11, VehicleCatalog::passion}) {

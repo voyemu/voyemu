@@ -388,10 +388,6 @@ void parsing() {
         passion.raw[concept_control(passion, VehicleConcept::gear)] = 255;
         check(!control_value(passion, concept_control(passion, VehicleConcept::gear)),
               "an invalid gear shows no value");
-        ViewState sdk;
-        sdk.platform = VehicleCatalog::none;
-        check(!field_reaches_guest(sdk, concept_control(sdk, VehicleConcept::gear)),
-              "the Android SDK image has no gear control");
         ViewState qinggan;
         qinggan.raw = initial_state(VehicleCatalog::qinggan09).at("raw_oem");
         check(concept_control(qinggan, VehicleConcept::speed) == "speed" &&

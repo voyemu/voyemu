@@ -69,8 +69,6 @@ int main() try {
     check(cluster({{"hardware_adapter", "sa8155-passion-21480"}}).empty(),
           "the Passion cluster receives no field");
 
-    check(multimedia({{"platform", "aosp"}, {"board", "ranchu"}}).empty(),
-          "the Android SDK image has no vehicle bus");
     const auto canbus = multimedia({{"api", 30}});
     check(canbus == canbus_multimedia_fields() && canbus.contains("speed") &&
                   canbus.contains("bcm_tyreLFPressure") && !canbus.contains("bcm_tyreLFTemp") &&

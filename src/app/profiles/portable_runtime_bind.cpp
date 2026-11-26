@@ -92,7 +92,6 @@ std::filesystem::path bind_machine_configuration(const std::filesystem::path &ro
                  manifest.value("schema", 0) == 1,
          "portable machine configuration required");
     const auto retained_definition = portable_profile_definition(root, profile, machine, seed);
-    check_sdk_seed(seed, retained_definition, manifest);
     const bool signed_system = manifest.at("android").contains("signed_android");
     const auto family = runtime_profile_reference(retained_definition, profile);
     const auto development_kernel = checked_development_kernel(seed, retained_definition, manifest);
@@ -474,8 +473,7 @@ std::filesystem::path bind_machine_configuration(const std::filesystem::path &ro
             }
         }
 
-        if (!android_sdk_profile(retained_definition) &&
-            !qinggan11_wheel_provider_profile(family) &&
+        if (!qinggan11_wheel_provider_profile(family) &&
             !record_declares(retained_definition, ProfilePlatform::passion, ProfileBoard::sa8155) &&
             (!record_declares(retained_definition, ProfilePlatform::qinggan09, ProfileBoard::nxp) ||
              retained_definition.value("components", Json::object()).contains("wheel"))) {

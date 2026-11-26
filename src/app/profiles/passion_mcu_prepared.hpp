@@ -32,11 +32,6 @@ inline bool passion_mcu_pin(const std::string &pin) {
     return sha256_text(pin);
 }
 
-inline bool passion_mcu_runtime_requested(const Json &definition) {
-    return passion_mcu_requested(definition) &&
-           definition.value("features", Json::object()).value("mcu_property_runtime", true);
-}
-
 inline void passion_mcu_helper_receipt(const std::string &apk, const Json &helper) {
     passion_mcu_need(helper.is_object() && helper.size() == 6 &&
                              helper.at("contract") == "passion-mcu-property-helper-v1" &&
@@ -107,7 +102,7 @@ inline void passion_mcu_helper_graph(const std::filesystem::path &root, const Js
 
 inline Json passion_mcu_contract(const Json &definition, const Json &candidate,
                                  const std::string &apk, const Json &helper) {
-    passion_mcu_need(passion_mcu_runtime_requested(definition) && passion_mcu_pin(apk),
+    passion_mcu_need(passion_mcu_requested(definition) && passion_mcu_pin(apk),
                      "requested graph and APK pin required");
     passion_mcu_need(
             candidate.at("schema") == 1 && candidate.at("kind") == "android-candidate" &&

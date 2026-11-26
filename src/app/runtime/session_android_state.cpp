@@ -170,7 +170,7 @@ void Session::schedule_android_state(std::uint32_t previous_revision) {
 void Session::deliver_android_state() {
     prepare_android_canbus();
 
-    if (nxp_presentation(android_spec_) || android_sdk_profile(android_spec_)) {
+    if (nxp_presentation(android_spec_)) {
         deliveries_["android"]["vehicle"] = {{"status", "unsupported"}, {"supported", false}};
 
         return;
@@ -967,7 +967,7 @@ void Session::queue_cluster_language() {
 }
 
 void Session::poll_oem_settings() {
-    if (nxp_presentation(android_spec_) || android_sdk_profile(android_spec_)) {
+    if (nxp_presentation(android_spec_)) {
         for (const char *key : {"language", "appearance"}) {
             deliveries_["android"][key] = {{"status", "unsupported"}, {"supported", false}};
         }

@@ -247,17 +247,9 @@ checked_signed_android_boot_pins(const std::filesystem::path &root,
 
     if (!android.contains("signed_android")) {
         const auto target = definition.value("target", Json::object());
-        const bool kvm = android_kvm(definition);
-        const auto id = manifest.value("profile", std::string{});
-        const auto &catalog = embedded_profile_catalog();
-        const bool bundled_vehicle =
-                kvm && std::any_of(catalog.begin(), catalog.end(), [&](const Json &record) {
-                    return record.at("id") == id && !android_sdk_profile(record.at("definition"));
-                });
-        require_signed_android(
-                target.value("preparation", std::string{}) != "signed-offline" &&
-                        (!kvm || (!bundled_vehicle && android_sdk_profile(definition))),
-                "signed Android proof required for this machine");
+        require_signed_android(target.value("preparation", std::string{}) != "signed-offline" &&
+                                       !android_kvm(definition),
+                               "signed Android proof required for this machine");
 
         return pins;
     }

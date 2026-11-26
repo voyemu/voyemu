@@ -492,12 +492,12 @@ static void export_android_machine_parts(
         runtime["ui_observer"] = observer;
     }
 
-    if (passion_power_runtime_requested(definition)) {
+    if (passion_power_requested(definition)) {
         runtime["android"]["display_power"] = export_passion_power(definition, candidate, stage,
                                                                    profile_pin);
     }
 
-    if (passion_mcu_runtime_requested(definition)) {
+    if (passion_mcu_requested(definition)) {
         runtime["android"]["mcu_property"] = export_passion_mcu(definition, candidate, stage,
                                                                 profile_pin);
     }

@@ -17,20 +17,14 @@ final class ProfileRegistry {
             Map<String, Object> data,
             String resourcePrefix,
             Path sourceRoot) {
-        private static final Set<String> PLATFORMS =
-                Set.of("qinggan09", "qinggan11", "passion", "aosp");
-        private static final Set<String> BOARDS = Set.of("8155", "nxp", "ranchu");
+        private static final Set<String> PLATFORMS = Set.of("qinggan09", "qinggan11", "passion");
+        private static final Set<String> BOARDS = Set.of("8155", "nxp");
 
         /** A definition that declares platform or board declares both valid; a title is valid. */
         Profile {
             if (data.containsKey("platform") || data.containsKey("board")) {
-                String platform = declared(data, "platform", PLATFORMS);
-                String board = declared(data, "board", BOARDS);
-                Failure.require(
-                        "aosp".equals(platform) == "ranchu".equals(board),
-                        "PROFILE_INVALID",
-                        "The AOSP platform requires the ranchu board",
-                        2);
+                declared(data, "platform", PLATFORMS);
+                declared(data, "board", BOARDS);
             }
 
             if (data.containsKey("title")) {

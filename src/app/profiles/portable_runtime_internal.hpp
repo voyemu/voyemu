@@ -112,8 +112,6 @@ Json portable_passion_power(const std::filesystem::path &seed, const Json &manif
 Json portable_passion_mcu(const std::filesystem::path &seed, const Json &manifest,
                           const Json &definition);
 void check_android_guest_identity(const Json &definition, const Json &manifest);
-void check_sdk_seed(const std::filesystem::path &seed, const Json &definition,
-                    const Json &manifest);
 std::string checked_can_model_receipt(const std::filesystem::path &seed, const Json &manifest);
 Json checked_development_kernel(const std::filesystem::path &seed, const Json &definition,
                                 const Json &manifest);

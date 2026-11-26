@@ -26,10 +26,8 @@ foreach(source IN LISTS voyemu_profile_files)
     # Tests select profiles by these lists, voyemu_profiles_<platform>_<board>, never by name.
     string(JSON platform ERROR_VARIABLE platform_missing GET "${definition}" platform)
     string(JSON board ERROR_VARIABLE board_missing GET "${definition}" board)
-    if(platform_missing OR board_missing OR
-       NOT ((platform MATCHES "^(qinggan09|qinggan11|passion)$" AND board MATCHES "^(8155|nxp)$")
-            OR (platform STREQUAL "aosp" AND board STREQUAL "ranchu")))
-        message(FATAL_ERROR "Unsupported platform and board in embedded profile ${id}")
+    if(platform_missing OR board_missing OR NOT platform MATCHES "^(qinggan09|qinggan11|passion)$" OR NOT board MATCHES "^(8155|nxp)$")
+        message(FATAL_ERROR "Embedded profile ${id} requires platform qinggan09, qinggan11 or passion and board 8155 or nxp")
     endif()
     list(APPEND voyemu_profiles_${platform}_${board} "${id}")
     file(SHA256 "${source}" digest)

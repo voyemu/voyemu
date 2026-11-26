@@ -8,14 +8,12 @@ namespace voyemu {
 enum class ProfilePlatform {
     qinggan09,
     qinggan11,
-    passion,
-    aosp
+    passion
 };
 // "8155" is the Qualcomm SA8155 board, "nxp" the NXP i.MX 8QuadMax board.
 enum class ProfileBoard {
     sa8155,
-    nxp,
-    ranchu
+    nxp
 };
 
 inline ProfilePlatform profile_platform(const Json &definition) {
@@ -35,11 +33,8 @@ inline ProfilePlatform profile_platform(const Json &definition) {
         return ProfilePlatform::passion;
     }
 
-    if (value == "aosp" && definition.value("board", std::string{}) == "ranchu") {
-        return ProfilePlatform::aosp;
-    }
-
-    throw VoyemuError("PROFILE_INVALID", "unsupported profile platform");
+    throw VoyemuError("PROFILE_INVALID",
+                      "profile platform must be qinggan09, qinggan11 or passion");
 }
 
 inline ProfileBoard profile_board(const Json &definition) {
@@ -55,17 +50,7 @@ inline ProfileBoard profile_board(const Json &definition) {
         return ProfileBoard::nxp;
     }
 
-    if (value == "ranchu" && definition.value("platform", std::string{}) == "aosp") {
-        return ProfileBoard::ranchu;
-    }
-
-    throw VoyemuError("PROFILE_INVALID", "unsupported profile board");
-}
-
-// The clean SDK guest has no OEM vehicle adapters.
-inline bool android_sdk_profile(const Json &definition) {
-    return definition.is_object() && definition.value("platform", std::string{}) == "aosp" &&
-           definition.value("board", std::string{}) == "ranchu";
+    throw VoyemuError("PROFILE_INVALID", "profile board must be 8155 or nxp");
 }
 
 // The platform and board of a profile, which scope its recipes.

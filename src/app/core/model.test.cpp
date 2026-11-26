@@ -485,26 +485,6 @@ int main(int argc, char **argv) try {
     }
 
     assert(missing_platform);
-    const auto stock = profile_vehicle_catalog(Json{{"platform", "aosp"}, {"board", "ranchu"}});
-    const auto stock_state = select_vehicle_startup(VehicleStartup::fresh, stock, Json::object(),
-                                                    nullptr);
-    assert(stock == VehicleCatalog::none && state_catalog(stock_state) == stock &&
-           stock_state.at("raw_oem") == Json::object() && catalog_json(stock) == Json::array() &&
-           !catalog_field(stock, "speed") && concept_bindings(stock).empty() &&
-           !field_binding(stock, "speed"));
-    rejects([&] {
-        apply_patch(stock_state, {{"speed", 1}});
-    });
-    rejects([&] {
-        select_vehicle_startup(VehicleStartup::resume, VehicleCatalog::qinggan09, Json::object(),
-                               &stock_state);
-    });
-    rejects([] {
-        profile_vehicle_catalog(Json{{"platform", "aosp"}, {"board", "8155"}});
-    });
-    rejects([] {
-        profile_vehicle_catalog(Json{{"platform", "passion"}, {"board", "ranchu"}});
-    });
     std::set<std::string> platform_names;
 
     for (std::size_t i = 0; i < platform.size(); ++i) {

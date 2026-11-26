@@ -68,14 +68,6 @@ int main() try {
         write_private_json(root / "profiles/source-only/profile.json", Json::object());
         ensure_private_directory(base / profile);
         write_private_json(base / profile / "android-launch.json", Json::object());
-        const auto internal = base / "retained-sdk-machine";
-        ensure_private_directory(internal);
-        write_private_json(internal / "android-launch.json",
-                           {{"platform", "aosp"}, {"board", "ranchu"}});
-        write_private_json(root / "profiles/internal-test/profile.json",
-                           {{"platform", "aosp"}, {"board", "ranchu"}});
-        check(ordinary_native_launch_file(internal / "android-launch.json"),
-              "retained SDK machine keeps its launch descriptor");
         check(native_profile_names(root) == std::vector<std::string>{profile, "source-only"},
               "source and prepared profile names are discovered");
 

@@ -5011,15 +5011,6 @@ int main(int argc, char **argv) try {
             "Display 0:\n mPrimaryDisplayDevice=Built-in Screen\nDisplay 4:\n mPrimaryDisplayDevice=Emulator2D\n real 1920 x 720, state ON\n";
     const std::string visible =
             "Window #0 com.qinggan.app.launcher/com.qinggan.secondlauncher.activity.SecondMainActivity\n mDisplayId=4 isOnScreen=true\n";
-    const std::string sdk_one =
-            "  mBaseDisplayInfo=DisplayInfo{Display, displayId 1, real 800 x 600, state ON, type VIRTUAL}";
-    assert(sdk_display_ready(sdk_one, 1, 800, 600));
-    assert(!sdk_display_ready(sdk_one, 0, 800, 600));
-    assert(!sdk_display_ready(sdk_one, 1, 1280, 720));
-    assert(!sdk_display_ready(sdk_one + "\n" + sdk_one, 1, 800, 600));
-    assert(!sdk_display_ready(
-            "mBaseDisplayInfo=DisplayInfo{Display, displayId 1, real 800 x 600, state OFF, type VIRTUAL}",
-            1, 800, 600));
     assert(secondary_display_ready(display, visible) == 4);
     // API28 OEM secondary HOME: wake_displays() uses the GENERIC parser for this profile id, so
     // these rows only prove the parser's own admission rules on a hand-written fixture:

@@ -1,7 +1,6 @@
 #pragma once
 #include "model.hpp"
 #include "process.hpp"
-#include "profile_identity.hpp"
 #include <set>
 #include <stdexcept>
 namespace voyemu {
@@ -146,20 +145,9 @@ inline std::vector<std::string> native_profile_names(const std::filesystem::path
             const auto file = entry.path() /
                               (group == root / "profiles" ? "profile.json" : "android-launch.json");
 
-            if (!ordinary_native_launch_file(file)) {
-                continue;
+            if (ordinary_native_launch_file(file)) {
+                names.insert(name);
             }
-
-            try {
-                if (android_sdk_profile(read_private_json(file, 1 << 20))) {
-                    continue;
-                }
-            } catch (const std::exception &) {
-                // Incomplete descriptors cannot add a profile to the catalog.
-                continue;
-            }
-
-            names.insert(name);
         }
     }
 

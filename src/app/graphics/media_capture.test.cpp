@@ -14,19 +14,6 @@ int main() try {
     namespace media = voyemu::media;
     const std::string epoch = "0123456789abcdef0123456789abcdef";
     const auto generic = media::readiness_owner(epoch, Json::object());
-    const auto sdk_owner = media::readiness_owner(epoch,
-                                                  {{"platform", "aosp"}, {"board", "ranchu"}});
-    assert(media::presentation_only(sdk_owner, epoch) &&
-           sdk_owner.at("presentation_family") == "aosp");
-    Json sdk_screen = {{"status", "presentation_ready"},
-                       {"presentation_family", "aosp"},
-                       {"guest_acknowledged", false},
-                       {"displays", {{"status", "both_guest_displays_ready"}}}};
-    assert(media::presentation_ready(sdk_screen, false, true));
-    assert(!media::presentation_ready(sdk_screen, true, true));
-    assert(!media::presentation_ready(sdk_screen, false, false));
-    sdk_screen.erase("displays");
-    assert(!media::presentation_ready(sdk_screen, false, true));
     const auto oem = media::readiness_owner(
             epoch,
             {{"systemui_adapter", {{"component", "com.qinggan.systemui/.SystemUIService"}}}});

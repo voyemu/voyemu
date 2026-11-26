@@ -1435,7 +1435,7 @@ Json build_profile_android(const std::filesystem::path &root, std::string_view p
 
     if (native_base_api(definition.at("android")) == 30) {
         request.overall_timeout_ms = 600000;
-        request.capture_frames = !android_sdk_profile(definition);
+        request.capture_frames = true;
     }
 
     if (record_declares(definition, ProfilePlatform::qinggan09, ProfileBoard::nxp)) {
@@ -1513,7 +1513,7 @@ Json build_profile_android(const std::filesystem::path &root, std::string_view p
                                        budget.peak_extra_bytes);
     }();
 
-    if (passion_power_runtime_requested(definition)) {
+    if (passion_power_requested(definition)) {
         need(hash(request.artifact_result, 16 << 20) == request.artifact_result_sha256 &&
                      sha256_bytes(authoring_profile_bytes(root, profile, selected)) ==
                              request.profile_sha256,
@@ -1524,7 +1524,7 @@ Json build_profile_android(const std::filesystem::path &root, std::string_view p
         write_private_json(candidate / "receipt.json", receipt, 1 << 20);
     }
 
-    if (passion_mcu_runtime_requested(definition)) {
+    if (passion_mcu_requested(definition)) {
         need(hash(request.artifact_result, 16 << 20) == request.artifact_result_sha256 &&
                      sha256_bytes(authoring_profile_bytes(root, profile, selected)) ==
                              request.profile_sha256,

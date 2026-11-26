@@ -59,8 +59,7 @@ constexpr std::uint64_t field_maximum(unsigned width) {
 enum class VehicleCatalog {
     qinggan09,
     qinggan11,
-    passion,
-    none
+    passion
 };
 // The catalogue of a platform value of profile.json.
 VehicleCatalog vehicle_catalog(std::string_view platform);
@@ -98,9 +97,6 @@ inline constexpr const char *qinggan11_map_sha256 =
         "1d29086a8bb11c1b7c3a1876c49339d769de3fbd76c08bb7ec04c7184cd61f54";
 inline constexpr const char *passion_map_sha256 =
         "8018e59b0457f653e0d4925bef95ce7483ad276b70b261e3d38c0f1d91c5cbb4";
-// SHA-256 of the empty JSON field catalogue ([]) for Android SDK profiles.
-inline constexpr const char *empty_map_sha256 =
-        "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945";
 const char *catalog_map_sha256(VehicleCatalog catalog);
 // The catalogue that map_sha256 of a vehicle state names.
 VehicleCatalog state_catalog(const Json &state);

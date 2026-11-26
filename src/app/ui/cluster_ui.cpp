@@ -560,7 +560,7 @@ bool Client::patch(const Json &values) {
 }
 
 bool field_reaches_guest(const ViewState &state, const std::string &name) {
-    return state.platform != VehicleCatalog::none && !state.model_only.contains(name);
+    return !state.model_only.contains(name);
 }
 
 std::string concept_control(const ViewState &state, VehicleConcept id) {

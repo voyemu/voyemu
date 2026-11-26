@@ -1426,7 +1426,7 @@ Json portable_android_launch(const std::filesystem::path &root,
     const auto base_identity = definition.contains("android")
                                        ? native_base_identity(definition.at("android"))
                                        : AndroidBaseIdentity{28, "arm64-v8a"};
-    const bool x86 = android_kvm(definition), sdk_guest = android_sdk_profile(definition);
+    const bool x86 = android_kvm(definition);
 
     if (x86 && os::dependency_host != "linux/x64") {
         throw VoyemuError("ANDROID_ACCELERATION", "x86_64 Android requires a Linux x64 KVM host");
@@ -1438,7 +1438,7 @@ Json portable_android_launch(const std::filesystem::path &root,
         android["guest_arch"] = base_identity.abi;
     }
 
-    if (android.at("api") == 30 && !sdk_guest) {
+    if (android.at("api") == 30) {
         need(definition.contains("configure") && definition.at("configure").contains("home") &&
                      definition.at("configure").contains("homeActivity"),
              "API30 profile HOME package and activity metadata required");
@@ -1514,15 +1514,7 @@ Json portable_android_launch(const std::filesystem::path &root,
                                          ProfileBoard::sa8155);
     const bool nxp = record_declares(definition, ProfilePlatform::qinggan09, ProfileBoard::nxp);
 
-    if (sdk_guest) {
-        need(x86 && android.at("gpuMode") == "host" &&
-                     android.at("features").value("MultiDisplay", std::string{}) == "on" &&
-                     android_screens(android.at("screens")).size() == 2,
-             "SDK guest requires x86_64, host graphics and two Android displays");
-        android.erase("home");
-        android.erase("vehicle_adapter");
-        android.erase("systemui_adapter");
-    } else if (passion) {
+    if (passion) {
 #ifdef _WIN32
         throw VoyemuError("PASSION_PRESENTATION",
                           "Windows presentation startup is not yet supported");
@@ -1583,10 +1575,6 @@ Json portable_android_launch(const std::filesystem::path &root,
     if (frontend) {
         android["frontend"] = host.frontend;
         android["args"].push_back("-no-window");
-    }
-
-    if (sdk_guest) {
-        return android;
     }
 
     if (nxp) {
@@ -1735,52 +1723,6 @@ void check_android_guest_identity(const Json &definition, const Json &manifest) 
     }
 }
 
-void check_sdk_seed(const std::filesystem::path &seed, const Json &definition,
-                    const Json &manifest) {
-    if (!android_sdk_profile(definition) || manifest.at("android").contains("signed_android")) {
-        return;
-    }
-
-    const auto &descriptor = definition.at("android"), &android = manifest.at("android");
-    const auto clean = native_clean_base(descriptor);
-    need(android_kvm(definition) && manifest.value("scope", std::string{}) == "android" &&
-                 !manifest.contains("qnx") && android.value("abi", std::string{}) == "x86_64" &&
-                 android.value("api", 0) == 30 &&
-                 android.at("base_archive_sha256") == descriptor.at("sha256") &&
-                 !android.contains("system_upgrade") && !android.contains("development_kernel") &&
-                 manifest.at("candidate_receipt_sha256") == clean.receipt_sha256,
-         "SDK machine must retain its clean Android base");
-    const auto file = seed / "evidence/candidate.json";
-    checked_file(file, clean.receipt_sha256, 512 * 1024);
-    const auto receipt = read_private_json(file, 512 * 1024);
-    need(receipt.at("archive_sha256") == descriptor.at("sha256") &&
-                 receipt.at("package") == descriptor.at("package") &&
-                 receipt.at("revision") == descriptor.at("revision") &&
-                 receipt.at("prepared_VM") == false,
-         "SDK extraction receipt identity differs");
-
-    for (const auto *name : {"system.img", "vendor.img"}) {
-        const auto &image = android.at("images").at(name);
-        need(image.at("file") == std::string("android/") + name &&
-                     image.at("sha256") == clean.pin("images", name) &&
-                     image.at("sha256") == receipt.at("files").at(name).at("sha256") &&
-                     image.at("bytes") == receipt.at("files").at(name).at("bytes"),
-             "stock SDK system or vendor image differs from the archive");
-    }
-
-    const auto &boot = android.at("boot_files");
-    need(boot.size() == clean.boot_files.size(), "SDK boot file roles differ");
-
-    for (const auto &[name, sha] : clean.boot_files) {
-        const auto rel = "android/" + name;
-        const auto &item = boot.at(name);
-        need(std::filesystem::path(name).filename() == name && item.at("file") == rel &&
-                     item.at("sha256") == sha && receipt.at("files").at(name).at("sha256") == sha,
-             "SDK boot metadata differs from the archive");
-        checked_file(seed / rel, sha, 64 * mib);
-    }
-}
-
 std::string checked_can_model_receipt(const std::filesystem::path &seed, const Json &manifest) {
     const auto &android = manifest.at("android");
 
@@ -1859,7 +1801,6 @@ static Json inspect_portable_runtime_impl(const std::filesystem::path &root,
     const auto definition = portable_profile_definition(root, profile, machine, seed);
     const auto family = runtime_profile_reference(definition, profile);
     check_android_guest_identity(definition, manifest);
-    check_sdk_seed(seed, definition, manifest);
     const auto boot_pins = checked_signed_android_boot_pins(root, seed, definition, manifest);
     const auto api = manifest.at("android").at("api").get<unsigned>();
     const bool android_only = manifest.contains("scope");
@@ -1986,8 +1927,7 @@ static Json inspect_portable_runtime_impl(const std::filesystem::path &root,
         (void)portable_passion_power(seed, manifest, definition);
     }
 
-    need(passion_mcu_runtime_requested(definition) ==
-                 manifest.at("android").contains("mcu_property"),
+    need(passion_mcu_requested(definition) == manifest.at("android").contains("mcu_property"),
          "partial MCU graph requires matching cold evidence");
 
     if (manifest.at("android").contains("mcu_property")) {

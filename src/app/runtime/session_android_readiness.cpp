@@ -4,41 +4,6 @@
 namespace voyemu {
 using namespace session_detail;
 
-bool sdk_display_ready(std::string_view dump, unsigned id, unsigned width, unsigned height) {
-    if (dump.size() > 128 * 1024) {
-        return false;
-    }
-
-    const auto identity = ", displayId " + std::to_string(id) + ",";
-    const auto geometry = ", real " + std::to_string(width) + " x " + std::to_string(height) + ",";
-    bool found = false;
-
-    while (!dump.empty()) {
-        const auto newline = dump.find('\n');
-        const auto line = dump.substr(0, newline);
-        const auto first = line.find_first_not_of(" \t");
-
-        if (first != std::string_view::npos &&
-            line.substr(first).starts_with("mBaseDisplayInfo=DisplayInfo{") &&
-            line.find(identity) != std::string_view::npos) {
-            if (found || line.find(geometry) == std::string_view::npos ||
-                line.find(", state ON,") == std::string_view::npos) {
-                return false;
-            }
-
-            found = true;
-        }
-
-        if (newline == std::string_view::npos) {
-            break;
-        }
-
-        dump.remove_prefix(newline + 1);
-    }
-
-    return found;
-}
-
 static std::optional<unsigned>
 secondary_display_for(const std::string &displays, const std::string &windows,
                       std::string_view component, bool provider_only = false,
@@ -699,15 +664,12 @@ void Session::prepare_android_displays() {
     const bool multiple = android_spec_.contains("features") &&
                           android_spec_["features"].value("MultiDisplay", std::string{}) == "on";
 
-    const bool sdk_guest = android_sdk_profile(android_spec_);
-
-    if (!sdk_guest && (primary_home_ready_ || !android_spec_.contains("home")) && !multiple) {
+    if ((primary_home_ready_ || !android_spec_.contains("home")) && !multiple) {
         return;
     }
 
     // State and wheel delivery keep their own cadence; only expensive display observations wait.
-    if ((android_displays_ready_ || sdk_guest) &&
-        std::chrono::steady_clock::now() < next_display_observation_) {
+    if (android_displays_ready_ && std::chrono::steady_clock::now() < next_display_observation_) {
         return;
     }
 
@@ -733,61 +695,6 @@ void Session::prepare_android_displays() {
         }
 
         android_boot_completed_ = true;
-    }
-
-    if (sdk_guest) {
-        const auto screens = android_screens(android_spec_.at("screens"));
-
-        if (screens.size() != 2 || screens[1].role != "secondary" || !multiple) {
-            throw VoyemuError("ANDROID_DISPLAY", "two Android SDK displays required");
-        }
-
-        // A stock SDK image owns its HOME. Read both live logical displays in one bounded query.
-        const auto display = adb({"shell", "dumpsys", "display"}, 2500);
-        next_display_observation_ = std::chrono::steady_clock::now() + std::chrono::seconds(1);
-
-        if (display.timed_out || display.exit_code) {
-            pending();
-
-            return;
-        }
-
-        for (const auto &screen : screens) {
-            if (!screen.android_display) {
-                throw VoyemuError("ANDROID_DISPLAY", "Android SDK screen requires a display id");
-            }
-
-            const auto number = *screen.android_display;
-
-            if (sdk_display_ready(display.output, number, screen.width, screen.height)) {
-                continue;
-            }
-
-            pending();
-
-            if (number && std::chrono::steady_clock::now() >= next_display_activation_) {
-                next_display_activation_ = std::chrono::steady_clock::now() +
-                                           std::chrono::seconds(2);
-                (void)adb({"shell", "am", "broadcast", "--user", "0", "-a",
-                           "com.android.emulator.multidisplay.START", "-n",
-                           "com.android.emulator.multidisplay/.MultiDisplayServiceReceiver"},
-                          2500);
-            }
-
-            return;
-        }
-
-        android_displays_ready_ = true;
-        deliveries_["android"]["displays"] = {
-                {"status", "both_guest_displays_ready"},
-                {"secondary_display_id", 1},
-                {"boot_id", android_transport_boot_},
-                {"size", Json::array({screens[0].width + screens[1].width,
-                                      std::max(screens[0].height, screens[1].height)})},
-                {"source", "Android SDK logical display sizes and power state"}};
-        next_display_observation_ = std::chrono::steady_clock::now() + std::chrono::seconds(3);
-
-        return;
     }
 
     const bool passion = passion_presentation(android_spec_);
