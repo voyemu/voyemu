@@ -184,6 +184,19 @@ inline std::string human_cli_output(std::string_view command, const Json &result
                                                  : error.value("message", failed));
     }
 
+    // A start whose multimedia cannot reach the host audio says why in one line.
+    std::string audio_line;
+
+    if (command == "start" && result.is_object() && result.contains("audio")) {
+        const auto &audio = result.at("audio");
+        const auto reason = audio.value("reason", std::string{});
+
+        if (audio.value("state", std::string{}) == "unavailable" &&
+            (reason == "no_server" || reason == "unsupported_server")) {
+            audio_line = text("start.audio_unavailable_" + reason) + "\n";
+        }
+    }
+
     if (command == "start" && !verbose) {
         const auto machine = machine_path.empty() ? label : machine_path.string();
         // A new session reports its subsystems; the status of a running one does not.
@@ -195,7 +208,7 @@ inline std::string human_cli_output(std::string_view command, const Json &result
                            : !multimedia ? text("output.session_started_cluster")
                                          : text("output.session_started_both");
 
-        return first + "\n" + text("output.stop_hint", {{"machine", machine}}) + "\n";
+        return first + "\n" + audio_line + text("output.stop_hint", {{"machine", machine}}) + "\n";
     }
 
     std::ostringstream out;
@@ -223,6 +236,8 @@ inline std::string human_cli_output(std::string_view command, const Json &result
         if (result.contains("with_multimedia")) {
             out << text("output.multimedia", {{"state", state("with_multimedia")}}) << '\n';
         }
+
+        out << audio_line;
 
         return out.str();
     }

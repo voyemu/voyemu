@@ -1,6 +1,5 @@
 #include "android_audio.hpp"
 #include "android_audio_test_host.hpp"
-#include "os/platform.hpp"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -23,28 +22,67 @@ int main() {
         }
 
         check(rejected, "invalid audio type rejected before launch");
+        // Synthetic host routes: one that needs the full engine and one without a server.
+        const os::EmulatorAudioOutput host{.driver = "pa",
+                                           .environment = {{"PULSE_SERVER", "unix:/run/pulse"}},
+                                           .full_engine = true,
+                                           .detail = "/run/pulse"};
+        const os::EmulatorAudioOutput absent{
+                .driver = "none", .unavailable = "no_server", .detail = "/run/user/1/pulse/native"};
         ProcessSpec silent;
-        configure_android_audio(silent, false);
-        check(silent.arguments == std::vector<std::string>{"-no-audio"},
+        silent.arguments = {"-no-window"};
+        const auto disabled = configure_android_audio(silent, false, host);
+        check(silent.arguments == std::vector<std::string>{"-no-window", "-no-audio"} &&
+                      disabled.state == AndroidAudioState::disabled && !disabled.full_engine &&
+                      !silent.environment.contains("QEMU_AUDIO_OUT_DRV"),
               "silent mode still disables audio");
+        check(android_audio_delivery(disabled).at("state") == "disabled",
+              "silent mode reports disabled audio");
 
         check(!android_audio_output_enabled({{"audioOutput", false}}),
               "explicit legacy silence remains supported");
         check(android_audio_output_enabled({{"audioOutput", true}}), "output enabled explicitly");
 
-        if (os::platform_name == "Linux") {
-            linux_pulse_audio_case();
-        } else {
+        {
             ProcessSpec output;
-            output.environment["QEMU_AUDIO_IN_DRV"] = "coreaudio";
-            configure_android_audio(output, true);
-            const std::string expected = os::host_windows ? "dsound" : "coreaudio";
-            check(output.environment.at("QEMU_AUDIO_DRV") == expected &&
-                          output.environment.at("QEMU_AUDIO_OUT_DRV") == expected &&
-                          output.environment.at("QEMU_AUDIO_IN_DRV") == "none",
-                  "output backend must match the host and cannot inherit an enabled microphone");
-            check(output.arguments.empty(),
-                  "output does not add global audio-disable or host-recording flags");
+            output.arguments = {"-no-window"};
+            output.environment["QEMU_AUDIO_IN_DRV"] = "pa";
+            const auto playing = configure_android_audio(output, true, host);
+            check(output.environment.at("QEMU_AUDIO_DRV") == "pa" &&
+                          output.environment.at("QEMU_AUDIO_OUT_DRV") == "pa" &&
+                          output.environment.at("QEMU_AUDIO_IN_DRV") == "none" &&
+                          output.environment.at("PULSE_SERVER") == "unix:/run/pulse",
+                  "output backend must follow the host and cannot inherit an enabled microphone");
+            check(output.arguments == std::vector<std::string>{"-no-window"},
+                  "output adds no audio flags and leaves the window arguments");
+            check(playing.state == AndroidAudioState::playing && playing.full_engine &&
+                          android_audio_delivery(playing) == Json{{"state", "playing"},
+                                                                  {"driver", "pa"},
+                                                                  {"reason", ""},
+                                                                  {"detail", "/run/pulse"}},
+                  "playback reports the host driver and its engine requirement");
+        }
+
+        {
+            ProcessSpec output;
+            output.arguments = {"-no-window"};
+            const auto unavailable = configure_android_audio(output, true, absent);
+            check(output.environment.at("QEMU_AUDIO_DRV") == "none" &&
+                          output.environment.at("QEMU_AUDIO_OUT_DRV") == "none" &&
+                          output.environment.at("QEMU_AUDIO_IN_DRV") == "none" &&
+                          !output.environment.contains("PULSE_SERVER") &&
+                          output.arguments == std::vector<std::string>{"-no-window"},
+                  "an unavailable host keeps the guest audio device on the none driver");
+            check(unavailable.state == AndroidAudioState::unavailable && !unavailable.full_engine &&
+                          android_audio_delivery(unavailable) ==
+                                  Json{{"state", "unavailable"},
+                                       {"driver", "none"},
+                                       {"reason", "no_server"},
+                                       {"detail", "/run/user/1/pulse/native"}},
+                  "an unavailable host reports its reason");
+        }
+
+        {
             const auto fixture = std::filesystem::current_path() / ".local/build/tmp" /
                                  ("audio-diagnostic-" + random_token());
             const auto directory = fixture / ".local/machines/profile/sessions" /
@@ -61,7 +99,11 @@ int main() {
             ProcessSpec capture;
             capture.environment["QEMU_WAV_PATH"] = "C:\\foreign.wav";
             capture.environment["QEMU_WAV_IN_PATH"] = "C:\\microphone.wav";
-            configure_android_audio(capture, true, "wav", directory, 1);
+            const auto diagnostic = configure_android_audio(capture, true, host, "wav", directory,
+                                                            1);
+            check(diagnostic.state == AndroidAudioState::diagnostic && diagnostic.driver == "wav" &&
+                          !diagnostic.full_engine,
+                  "the WAV diagnostic keeps the headless engine on every host");
             check(capture.executable.empty() &&
                           capture.arguments == std::vector<std::string>{"-audio", "wav"},
                   "diagnostic preserves executable and enables actual audio");
@@ -82,7 +124,7 @@ int main() {
                 bool failed = false;
                 try {
                     ProcessSpec p;
-                    configure_android_audio(p, enabled, value, at, g);
+                    configure_android_audio(p, enabled, host, value, at, g);
                 } catch (...) {
                     failed = true;
                 }
@@ -111,7 +153,7 @@ int main() {
             }
             denied("wav", directory, 1);
             ProcessSpec next;
-            configure_android_audio(next, true, "wav", directory, 2);
+            configure_android_audio(next, true, host, "wav", directory, 2);
             check(next.environment.at("QEMU_WAV_PATH") ==
                           (directory / "android-audio-g2.wav").string(),
                   "restart generation reused capture");
@@ -141,7 +183,7 @@ int main() {
             conflict.arguments = {"-audio", "dsound"};
             rejected = false;
             try {
-                configure_android_audio(conflict, true, "wav", directory, 3);
+                configure_android_audio(conflict, true, host, "wav", directory, 3);
             } catch (...) {
                 rejected = true;
             }

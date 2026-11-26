@@ -12,7 +12,8 @@ void wine_volume_root_case(const std::filesystem::path &directory) {
                 std::filesystem::path("Z:") /
                 std::filesystem::path(wine_native_unix_path(directory)).make_preferred();
         ProcessSpec mapped_capture;
-        configure_android_audio(mapped_capture, true, "wav", mapped, 7);
+        configure_android_audio(mapped_capture, true, os::EmulatorAudioOutput{.driver = "dsound"},
+                                "wav", mapped, 7);
 
         if (mapped_capture.environment.at("QEMU_WAV_PATH") !=
             (mapped / "android-audio-g7.wav").string()) {
@@ -20,5 +21,3 @@ void wine_volume_root_case(const std::filesystem::path &directory) {
         }
     }
 }
-
-void linux_pulse_audio_case() {}

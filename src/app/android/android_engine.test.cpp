@@ -288,6 +288,35 @@ int main() {
 
             std::filesystem::remove_all(base, cleanup_error);
         }
+
+        // A full-engine audio route hides the Qt window instead of selecting the headless engine.
+        {
+            std::vector<std::string> hidden{"-verbose", "-no-window", "-qemu", "-no-window"};
+            android_sdk_hidden_window(hidden, true);
+
+            if (hidden != std::vector<std::string>{"-verbose", "-qt-hide-window", "-qemu",
+                                                   "-no-window"} ||
+                android_sdk_headless_backend(hidden)) {
+                throw std::runtime_error("full engine kept the headless SDK window");
+            }
+
+            std::vector<std::string> headless{"-verbose", "-no-window"};
+            android_sdk_hidden_window(headless, false);
+
+            if (headless != std::vector<std::string>{"-verbose", "-no-window"} ||
+                !android_sdk_headless_backend(headless)) {
+                throw std::runtime_error("headless route changed the SDK window");
+            }
+
+            std::vector<std::string> windowed{"-verbose"};
+            android_sdk_hidden_window(windowed, true);
+
+            if (windowed != std::vector<std::string>{"-verbose"} ||
+                android_sdk_headless_backend(windowed) ||
+                android_sdk_headless_backend({"-qemu", "-no-window"})) {
+                throw std::runtime_error("a visible window or QEMU argument selected an engine");
+            }
+        }
         std::cout
                 << "Windows ARM64 backend, multi-threaded TCG and SDK DLL environment passed; Mac unchanged\n";
 

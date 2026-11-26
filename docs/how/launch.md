@@ -45,6 +45,14 @@ Different machines run at the same time, each in its own session. Every start cl
 | `--provider FILE` | Registers a provider manifest, up to four; the path follows the [path rule](preparation.md) |
 | `--verbose` | Prints the session details after a successful `start` and the log records on `stderr`, see [logs](logs.md) |
 
+## Audio
+
+Android plays its sound through the audio output of the host: Core Audio on macOS, DirectSound on Windows and PulseAudio on Linux. Microphone capture stays disabled.
+
+On Linux, Voyemu connects to PulseAudio, or to PipeWire through its PulseAudio server, on the local socket named by `PULSE_SERVER=unix:/path/to/socket` and, without that variable, on `$XDG_RUNTIME_DIR/pulse/native`.
+
+When the host cannot play, because nothing listens on the socket or `PULSE_SERVER` names no local socket, such as a `tcp:` address, Android still starts with its sound device and plays into no output. `start` then prints one line with the reason, and `deliveries.android.audio` of `session.status` reports `state` `unavailable` with `reason` `no_server` or `unsupported_server`. When the host plays, `state` is `playing` and `driver` names the host driver. Why the guest keeps its sound device is explained in [audio output without a host](../why/audio-output.md).
+
 ## Output language
 
 Commands print text; only `test` writes JSON, see [Voyemu API](api.md). Help, output and errors of the commands are in English, Russian or Chinese. `--lang=en|ru|zh` anywhere on the command line selects the language; without it the first non-empty `LC_ALL`, `LC_MESSAGES` or `LANG` decides, then the interface language of the host. A `C` or `POSIX` locale, an unknown language and no setting at all mean English. Error codes and the JSON of `test` are the same in every language. The [window](window.md) keeps its own interface language.

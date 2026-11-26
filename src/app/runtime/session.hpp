@@ -556,8 +556,7 @@ private:
     void reset_android_identity_for_new_boot();
     void retire_android_transaction_for_flush(bool android_stopping);
     void configure_android_native_backend(ProcessSpec &spec, const Json &specification,
-                                          unsigned port, std::uint64_t generation,
-                                          bool audio_output);
+                                          unsigned port, std::uint64_t generation);
     std::optional<ProcessResult> execute_android_transaction(
             const Json &specification, const std::vector<std::string> &arguments, int &timeout_ms,
             std::size_t limit, std::int64_t expected_pid, std::uint64_t expected_generation);

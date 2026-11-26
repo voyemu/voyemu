@@ -238,6 +238,12 @@ bool android_windows_renderer(const Json &specification, bool diagnostic_native)
     return !diagnostic_native && windows_android_renderer_policy(specification);
 }
 
+// The native diagnostic runs the macOS engine, so the backend of this PE host does not apply.
+os::EmulatorAudioOutput android_emulator_audio_output(bool diagnostic_native) {
+    return diagnostic_native ? os::EmulatorAudioOutput{.driver = "coreaudio"}
+                             : os::emulator_audio_output();
+}
+
 int android_stop_sync_budget() {
     return 60000; // The same finite stop request deadline still clamps this framed flush.
 }
@@ -545,8 +551,7 @@ void Session::reset_android_transaction() {
 }
 
 void Session::configure_android_native_backend(ProcessSpec &spec, const Json &specification,
-                                               unsigned port, std::uint64_t generation,
-                                               bool audio_output) {
+                                               unsigned port, std::uint64_t generation) {
     if (specification.contains("diagnostic_native")) {
         const auto &native = specification.at("diagnostic_native");
 
@@ -561,11 +566,6 @@ void Session::configure_android_native_backend(ProcessSpec &spec, const Json &sp
                 3600000};
         spec.environment["ANDROID_HOME"] = native.at("sdk_root").get<std::string>();
         spec.environment["ANDROID_SDK_ROOT"] = native.at("sdk_root").get<std::string>();
-
-        if (audio_output) {
-            spec.environment["QEMU_AUDIO_DRV"] = "coreaudio";
-            spec.environment["QEMU_AUDIO_OUT_DRV"] = "coreaudio";
-        }
     }
 }
 

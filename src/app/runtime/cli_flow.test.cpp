@@ -1593,6 +1593,11 @@ int main(int argc, char **argv) try {
                             headless["deliveries"]["frontend"]["pid"].get<std::int64_t>() > 0 &&
                             headless["deliveries"]["frontend"]["background"] == true,
                     "public A9 background CLI omitted its mandatory cockpit or requested foreground");
+            require(headless["deliveries"]["android"]["audio"] == Json{{"state", "disabled"},
+                                                                       {"driver", ""},
+                                                                       {"reason", ""},
+                                                                       {"detail", ""}},
+                    "a silent launch did not report its disabled audio");
             const auto background_session = configuration / qinggan09_profile() / "sessions" /
                                             background_started.at("session_id").get<std::string>();
             // Only the macOS cockpit writes the media-native proof of its owned surface.

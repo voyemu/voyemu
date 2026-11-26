@@ -44,6 +44,18 @@ inline bool android_sdk_headless_backend(const std::vector<std::string> &argumen
     return std::find(arguments.begin(), options_end, "-no-window") != options_end;
 }
 
+// The hidden SDK window: -no-window selects the headless engine, and a host audio driver that
+// only the full engine has hides the Qt window of that engine instead. Runs after the audio route
+// and before the engine identity; QEMU arguments after -qemu stay unchanged.
+inline void android_sdk_hidden_window(std::vector<std::string> &arguments, bool full_engine) {
+    const auto options_end = std::find(arguments.begin(), arguments.end(), "-qemu");
+
+    if (full_engine) {
+        std::replace(arguments.begin(), options_end, std::string("-no-window"),
+                     std::string("-qt-hide-window"));
+    }
+}
+
 // An explicit binding always wins; Windows prefers its shipped PE SDK when present; every other
 // host keeps the native SDK.
 inline std::filesystem::path android_runtime_sdk_root(const std::filesystem::path &root,

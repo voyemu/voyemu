@@ -22,6 +22,10 @@ bool android_windows_renderer(const Json &, bool) {
     return false;
 }
 
+os::EmulatorAudioOutput android_emulator_audio_output(bool) {
+    return os::emulator_audio_output();
+}
+
 int android_stop_sync_budget() {
     return 15000;
 }
@@ -334,8 +338,8 @@ void Session::add_interguest_delivery(Json &) const {}
 
 void Session::reset_android_transaction() {}
 
-void Session::configure_android_native_backend(ProcessSpec &, const Json &, unsigned, std::uint64_t,
-                                               bool) {}
+void Session::configure_android_native_backend(ProcessSpec &, const Json &, unsigned,
+                                               std::uint64_t) {}
 
 std::optional<ProcessResult> Session::execute_android_transaction(const Json &,
                                                                   const std::vector<std::string> &,

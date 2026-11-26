@@ -265,5 +265,7 @@
     "progress.target_translated": "Цель сборки {target} ({abi}) работает на этом хосте {host_abi} в программной трансляции, намного медленнее, чем с аппаратным ускорением.",
     "progress.verify_done": "{name}: SHA-256 совпадает",
     "progress.verify_size": "Проверка {name_of} ({total})",
-    "progress.verify_status_size": "  {done} из {total} ({percent}%), осталось {eta}"
+    "progress.verify_status_size": "  {done} из {total} ({percent}%), осталось {eta}",
+    "start.audio_unavailable_no_server": "Звук мультимедиа выключен: нет локального сокета PulseAudio в $XDG_RUNTIME_DIR/pulse/native. Другой сокет задаётся через PULSE_SERVER=unix:/путь.",
+    "start.audio_unavailable_unsupported_server": "Звук мультимедиа выключен: в PULSE_SERVER нужен локальный сокет вида unix:/путь."
 }

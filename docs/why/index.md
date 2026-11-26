@@ -34,3 +34,4 @@ Every record follows the same template: **Decision → Context → Alternatives 
 - [Embedded ADB](embedded-adb.md) — the session's own ADB transport instead of a shared server
 - [Voyemu API through `voyemu test`](api.md) — one JSON request per process, no network service
 - [Error codes and the unknown outcome](error-codes.md) — the `_UNKNOWN` suffix decides the outcome
+- [Audio output without a host](audio-output.md) — the `none` driver keeps the guest sound device when the host cannot play

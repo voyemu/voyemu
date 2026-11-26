@@ -63,14 +63,9 @@ bool socket_reset();
 SocketHandle open_stream_socket(int family);
 // Binds and listens on a Unix-domain path on POSIX. Returns no_socket on failure or on Windows.
 SocketHandle open_unix_listener(std::string_view path, int backlog);
-// Whether a filesystem Unix-domain stream socket accepts a nonblocking connection.
-#ifndef _WIN32
+// Whether a filesystem Unix-domain stream socket accepts a nonblocking connection on POSIX. Returns
+// false on Windows.
 bool unix_socket_listening(std::string_view path);
-#else
-inline bool unix_socket_listening(std::string_view) {
-    return false;
-}
-#endif
 // A non-blocking loopback TCP socket that the children of this process do not inherit and that
 // reports a closed peer as an error, not a signal; no_socket on failure.
 SocketHandle open_private_tcp_socket();

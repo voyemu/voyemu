@@ -6,6 +6,3 @@
 // Wine reports its Z:\ drive root as a reparse point; a session directory reached through that
 // drive is still an ordinary owned path below the volume root. Nothing to check on POSIX.
 void wine_volume_root_case(const std::filesystem::path &directory);
-
-// Linux uses the PulseAudio desktop socket. Nothing to check on Windows.
-void linux_pulse_audio_case();

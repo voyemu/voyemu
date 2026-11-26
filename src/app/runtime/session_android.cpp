@@ -481,13 +481,20 @@ void Session::attach_android(const Json &input, bool explicit_cold_boot) {
         throw VoyemuError("ANDROID_AUDIO_DIAGNOSTIC", "direct SDK route required");
     }
 
-    const bool playback = configure_android_audio(spec, audio_output,
-                                                  specification.value("diagnostic_audio", Json()),
-                                                  directory_, generation);
-    configure_android_native_backend(spec, specification, port, generation, playback);
-    logging::write(logging::Level::info, "android", "audio.configured",
-                   {{"output", playback ? spec.environment.at("QEMU_AUDIO_OUT_DRV") : "disabled"},
-                    {"input", "disabled"}});
+    const auto audio = configure_android_audio(
+            spec, audio_output, android_emulator_audio_output(diagnostic_native),
+            specification.value("diagnostic_audio", Json()), directory_, generation);
+    // The window mode follows the audio route, before the engine identity reads the arguments.
+    android_sdk_hidden_window(spec.arguments, audio.full_engine);
+    configure_android_native_backend(spec, specification, port, generation);
+    const auto audio_delivery = android_audio_delivery(audio);
+    logging::write(
+            logging::Level::info, "android", "audio.configured",
+            {{"output", audio.driver.empty() ? "disabled" : audio.driver},
+             {"input", "disabled"},
+             {"state", audio_delivery.at("state")},
+             {"reason", audio.reason},
+             {"engine", android_sdk_headless_backend(spec.arguments) ? "headless" : "full"}});
     // Keep backend board arguments last, after every owned emulator option.
     const auto machine_arguments = android_sdk_machine_arguments(os::host_windows,
                                                                  diagnostic_native);
@@ -598,7 +605,8 @@ void Session::attach_android(const Json &input, bool explicit_cold_boot) {
              {{"mode", android_resume_ ? "restore_requested" : "cold"},
               {"reason", explicit_cold_boot ? "explicit_cold_boot" : checkpoint.reason},
               {"checkpoint_saved", false}}},
-            {"usb_drive", {{"attached", false}}}};
+            {"usb_drive", {{"attached", false}}},
+            {"audio", audio_delivery}};
     deliveries_["android"]["pid_namespace"] = android_.pid_namespace();
     deliveries_["android"]["owned_adb"] = android_spec_.at("owned_adb");
 

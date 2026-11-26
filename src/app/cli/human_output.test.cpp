@@ -78,6 +78,28 @@ int main() try {
                             "free-profile", "/machines/car", false, cli::Language::russian) ==
            "Сеанс запущен, окно приборки откроется через несколько секунд.\n"
            "Остановить: voyemu stop /machines/car\n");
+    // Unavailable host audio adds one line in either language; playback adds none.
+    auto silent = started;
+    silent["audio"] = {{"state", "unavailable"},
+                       {"driver", "none"},
+                       {"reason", "no_server"},
+                       {"detail", "/run/user/1/pulse/native"}};
+    assert(human_cli_output("start", silent, "free-profile", "/machines/car") ==
+           "Session started; the multimedia and cluster windows open in a few seconds.\n"
+           "Multimedia sound is off: no local PulseAudio socket at $XDG_RUNTIME_DIR/pulse/native. "
+           "Set PULSE_SERVER=unix:/path to use another one.\n"
+           "Stop it: voyemu stop /machines/car\n");
+    silent["audio"]["reason"] = "unsupported_server";
+    assert(human_cli_output("start", silent, "free-profile", "/machines/car", false,
+                            cli::Language::russian)
+                   .find("Звук мультимедиа выключен: в PULSE_SERVER нужен локальный сокет вида "
+                         "unix:/путь.\n") != std::string::npos);
+    assert(human_cli_output("start", silent, "free-profile", "/machines/car", true)
+                   .ends_with("Multimedia: on\nMultimedia sound is off: PULSE_SERVER must name a "
+                              "local socket as unix:/path.\n"));
+    silent["audio"] = {{"state", "playing"}, {"driver", "pa"}, {"reason", ""}, {"detail", ""}};
+    assert(human_cli_output("start", silent, "free-profile", "/machines/car") ==
+           human_cli_output("start", started, "free-profile", "/machines/car"));
     assert(human_cli_output("start", {{"ok", true}, {"stopped", false}, {"android_pid", 7}},
                             "free-profile", "/machines/car") ==
            "Machine is already running: /machines/car\nStop it: voyemu stop /machines/car\n");

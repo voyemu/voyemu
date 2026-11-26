@@ -801,6 +801,13 @@ int start_command(Arguments &args, const Emit &emit) {
                                         {"with_cluster", args.cluster},
                                         {"with_multimedia", args.multimedia},
                                         {"runtime", "native C++"}};
+                            const auto android = response.value("deliveries", Json::object())
+                                                         .value("android", Json::object());
+
+                            if (android.contains("audio")) {
+                                output["audio"] = android.at("audio");
+                            }
+
                             voyemu::append_start_machine_identity(
                                     output, response, args.machine,
                                     args.private_start && args.exclusive ? args.machine_path

@@ -1,15 +1,30 @@
 #pragma once
 #include "check.hpp"
 #include "model.hpp"
+#include "os/audio.hpp"
 #include "os/fs.hpp"
-#include "os/platform.hpp"
-#include "os/socket.hpp"
 #include "process.hpp"
 #include <algorithm>
-#include <cstdlib>
-#include <optional>
 #include <stdexcept>
 namespace voyemu {
+// playing reaches the host, unavailable keeps the guest device on the none driver, disabled has no
+// guest audio device and diagnostic writes the session WAV.
+enum class AndroidAudioState {
+    playing,
+    unavailable,
+    disabled,
+    diagnostic
+};
+
+// The output that configure_android_audio set up: the QEMU driver, whether the SDK engine needs
+// its window for it, and for unavailable output the reason and detail of the host backend.
+struct AndroidAudioRoute {
+    AndroidAudioState state{};
+    std::string driver;
+    bool full_engine{};
+    std::string reason, detail;
+};
+
 inline bool android_audio_output_enabled(const Json &specification) {
     if (specification.contains("audioOutput") && !specification.at("audioOutput").is_boolean()) {
         throw VoyemuError("ANDROID_AUDIO_MODE", "boolean audioOutput required");
@@ -54,54 +69,14 @@ inline void configure_android_wav_audio(ProcessSpec &process, const std::filesys
     process.arguments.insert(process.arguments.end(), {"-audio", "wav"});
 }
 
-inline std::optional<std::string> android_pulse_audio_server() {
-    std::filesystem::path socket;
-    const char *server = std::getenv("PULSE_SERVER");
-    const bool explicit_server = server && *server;
-
-    if (explicit_server) {
-        const std::string_view address(server);
-        constexpr std::string_view prefix = "unix:";
-        socket = address.starts_with(prefix) ? address.substr(prefix.size()) : address;
-
-        if (!socket.is_absolute() || address.find_first_of(" \t\n\r\f\v") != address.npos) {
-            throw VoyemuError("ANDROID_AUDIO_MODE",
-                              "one local PulseAudio socket required in PULSE_SERVER");
-        }
-    } else if (const char *runtime = std::getenv("XDG_RUNTIME_DIR"); runtime && *runtime) {
-        socket = std::filesystem::path(runtime) / "pulse/native";
-    }
-
-    const auto path = socket.string();
-
-    if (!socket.is_absolute() || path.find_first_of(" \t\n\r\f\v") != path.npos) {
-        return std::nullopt;
-    }
-
-    std::error_code error;
-    const auto status = std::filesystem::status(socket, error);
-
-    if (explicit_server && std::filesystem::exists(status) && !std::filesystem::is_socket(status)) {
-        throw VoyemuError("ANDROID_AUDIO_MODE", "PULSE_SERVER does not name a local socket");
-    }
-
-    if (!std::filesystem::is_socket(status) || !os::unix_socket_listening(path)) {
-        return std::nullopt;
-    }
-
-    return "unix:" + path;
-}
-
-inline bool configure_android_audio(ProcessSpec &process, bool output,
-                                    const Json &diagnostic = nullptr,
-                                    const std::filesystem::path &session = {},
-                                    unsigned generation = 0) {
+// Applies the output of the guest: the host route, the none driver when the host cannot play, or
+// the WAV diagnostic. Never reads the environment and never changes the window arguments.
+inline AndroidAudioRoute configure_android_audio(ProcessSpec &process, bool output,
+                                                 const os::EmulatorAudioOutput &host,
+                                                 const Json &diagnostic = nullptr,
+                                                 const std::filesystem::path &session = {},
+                                                 unsigned generation = 0) {
     if (!diagnostic.is_null()) {
-        if (os::platform_name == "Linux") {
-            throw VoyemuError("ANDROID_AUDIO_DIAGNOSTIC",
-                              "direct WAV route requires macOS or Windows");
-        }
-
         const auto reject = [](bool accepted, const char *why) {
             if (!accepted) {
                 throw VoyemuError("ANDROID_AUDIO_DIAGNOSTIC", why);
@@ -133,40 +108,43 @@ inline bool configure_android_audio(ProcessSpec &process, bool output,
                    input = session / ("android-no-input-g" + std::to_string(generation) + ".wav");
         configure_android_wav_audio(process, wave, input);
 
-        return true;
+        return {AndroidAudioState::diagnostic, "wav"};
     }
 
     if (!output) {
         process.arguments.push_back("-no-audio");
 
-        return false;
+        return {AndroidAudioState::disabled};
+    }
+
+    // An unavailable host keeps the guest audio device and its snapshot on the none driver.
+    AndroidAudioRoute route{AndroidAudioState::unavailable, "none", false, host.unavailable,
+                            host.detail};
+
+    if (host.unavailable.empty()) {
+        route = {AndroidAudioState::playing, host.driver, host.full_engine, {}, host.detail};
+
+        for (const auto &[key, value] : host.environment) {
+            process.environment[key] = value;
+        }
     }
 
     // SDK documents directional backends. Never open a host recording device.
-    const char *driver = os::host_windows ? "dsound" : "coreaudio";
-
-    if (os::platform_name == "Linux") {
-        const auto server = android_pulse_audio_server();
-
-        if (!server) {
-            process.arguments.push_back("-no-audio");
-
-            return false;
-        }
-
-        driver = "pa";
-        process.environment["PULSE_SERVER"] = *server;
-        process.environment["QEMU_AUDIO_ADC_VOICES"] = "0";
-        // The SDK executable selected by -no-window lacks PulseAudio.
-        std::replace(process.arguments.begin(), process.arguments.end(),
-                     std::string_view{"-no-window"}, std::string_view{"-qt-hide-window"});
-    }
-
-    process.environment["QEMU_AUDIO_DRV"] = driver;
-    process.environment["QEMU_AUDIO_OUT_DRV"] = driver;
+    process.environment["QEMU_AUDIO_DRV"] = route.driver;
+    process.environment["QEMU_AUDIO_OUT_DRV"] = route.driver;
     process.environment["QEMU_AUDIO_IN_DRV"] = "none";
 
     // -allow-host-audio is deliberately absent; guest input remains silent.
-    return true;
+    return route;
+}
+
+// The audio delivery of the session status: deliveries.android.audio.
+inline Json android_audio_delivery(const AndroidAudioRoute &route) {
+    static constexpr const char *states[] = {"playing", "unavailable", "disabled", "diagnostic"};
+
+    return {{"state", states[static_cast<int>(route.state)]},
+            {"driver", route.driver},
+            {"reason", route.reason},
+            {"detail", route.detail}};
 }
 } // namespace voyemu

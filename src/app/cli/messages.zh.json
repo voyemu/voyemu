@@ -265,5 +265,7 @@
     "progress.target_translated": "构建目标 {target}（{abi}）在此 {host_abi} 主机上以软件转译运行，比硬件加速慢得多。",
     "progress.verify_done": "{name}：SHA-256 校验通过",
     "progress.verify_size": "正在校验{name_of}（{total}）",
-    "progress.verify_status_size": "  {done} / {total}（{percent}%），剩余 {eta}"
+    "progress.verify_status_size": "  {done} / {total}（{percent}%），剩余 {eta}",
+    "start.audio_unavailable_no_server": "多媒体声音已关闭：$XDG_RUNTIME_DIR/pulse/native 中没有本地 PulseAudio 套接字。可通过 PULSE_SERVER=unix:/路径 使用其他套接字。",
+    "start.audio_unavailable_unsupported_server": "多媒体声音已关闭：PULSE_SERVER 必须以 unix:/路径 的形式指定本地套接字。"
 }

@@ -265,5 +265,7 @@
     "progress.target_translated": "Build target {target} ({abi}) runs on this {host_abi} host in software translation, much slower than with hardware acceleration.",
     "progress.verify_done": "{name}: SHA-256 verified",
     "progress.verify_size": "Checking {name_of} ({total})",
-    "progress.verify_status_size": "  {done} of {total} ({percent}%), {eta} left"
+    "progress.verify_status_size": "  {done} of {total} ({percent}%), {eta} left",
+    "start.audio_unavailable_no_server": "Multimedia sound is off: no local PulseAudio socket at $XDG_RUNTIME_DIR/pulse/native. Set PULSE_SERVER=unix:/path to use another one.",
+    "start.audio_unavailable_unsupported_server": "Multimedia sound is off: PULSE_SERVER must name a local socket as unix:/path."
 }

@@ -23,6 +23,7 @@
 #include "media_discovery.hpp"
 #include "media_readiness.hpp"
 #include "nxp_presentation.hpp"
+#include "os/audio.hpp"
 #include "os/fs.hpp"
 #include "os/net.hpp"
 #include "os/platform.hpp"
@@ -149,6 +150,9 @@ Json android_qmp_endpoint(const std::string &session_id, unsigned console_port);
 // Platform parts of Android and QNX storage and of the stop budgets; session_posix.cpp and
 // session_windows.cpp define them.
 bool android_windows_renderer(const Json &specification, bool diagnostic_native);
+// The playback route of the SDK engine: the audio backend of this host, or under Wine the route of
+// the macOS engine of the native diagnostic.
+os::EmulatorAudioOutput android_emulator_audio_output(bool diagnostic_native);
 int android_stop_sync_budget();
 void check_restart_can_boundary(bool with_can);
 void require_short_pair_transport();

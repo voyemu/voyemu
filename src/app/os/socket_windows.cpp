@@ -118,6 +118,10 @@ SocketHandle open_unix_listener(std::string_view, int) {
     return no_socket;
 }
 
+bool unix_socket_listening(std::string_view) {
+    return false;
+}
+
 SocketHandle open_private_tcp_socket() {
     const SOCKET socket = WSASocketW(AF_INET, SOCK_STREAM, IPPROTO_TCP, nullptr, 0,
                                      WSA_FLAG_NO_HANDLE_INHERIT);
