@@ -160,6 +160,7 @@ int main(int argc, char **argv) {
                 handoff[it.key()] = {{"receipt", receipt.string()},
                                      {"receipt_sha256", sha256_file(receipt)},
                                      {"output_type", proof.at("output_type")},
+                                     {"abi", proof.at("abi")},
                                      {"output", proof.at("output")},
                                      {"sha256", proof.at("sha256")}};
             }
@@ -608,9 +609,11 @@ int main(int argc, char **argv) {
                                          {"sourceBuildSha256", x86_sha}};
         write_private_json(x86_component / "component.json", x86_definition);
         write_private_json(root / "profiles/p_x86_64/profile.json",
-                           {{"local", true}, {"components", {{"own", "components/own"}}}});
+                           {{"local", true},
+                            {"android", {{"package", "system-images;android-30;default;x86_64"}}},
+                            {"components", {{"own", "components/own"}}}});
         const auto x86 = build_native_component(x86_component, compiler, pin, root / "x86-compiler",
-                                                0);
+                                                0, {}, "x86_64");
         check(x86.at("abi") == "x86_64" &&
                       x86.at("command").at(0) == "--target=x86_64-linux-android28",
               "compiler target and ELF ABI of declared process");
@@ -640,6 +643,23 @@ int main(int argc, char **argv) {
         }
 
         check(mismatch && built == 1, "cached x86 DSO rejected for ARM consumer");
+        // Only a shared library of an ARM64 process crosses the guest ABI, through Native Bridge.
+        const auto abi_rejected = [](const Json &definition, std::string_view guest) {
+            try {
+                (void)native_component_abi(definition, guest);
+            } catch (const VoyemuError &error) {
+                return error.code() == "COMPONENT_RECIPE";
+            }
+
+            return false;
+        };
+        check(native_component_abi(Json::object(), "x86_64") == "x86_64" &&
+                      native_component_abi({{"abi", "arm64-v8a"}}, "x86_64") == "arm64-v8a" &&
+                      abi_rejected({{"abi", "arm64-v8a"}, {"outputType", "executable"}},
+                                   "x86_64") &&
+                      abi_rejected({{"abi", "x86_64"}}, "arm64-v8a") &&
+                      abi_rejected({{"abi", "armeabi-v7a"}}, "armeabi-v7a"),
+              "native component ABI follows the guest and Native Bridge");
         // A component that names the pin of another profile installs that published asset.
         const auto reuse_component = root / "profiles/reuse/components/own";
         ensure_private_directory(reuse_component / "src");

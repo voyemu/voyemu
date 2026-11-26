@@ -21,7 +21,8 @@ std::filesystem::path native_component_sources(const std::filesystem::path &root
 // another profile publishes for the same bytes, or else <profile>/<component>.
 std::string native_component_pin(const std::string &profile, const std::string &component,
                                  const Json &definition);
-// A native library can declare the ABI of the OEM process that loads it.
+// A native library can declare the ABI of the OEM process that loads it; the one rule of the
+// component ABI, which the Java helper receives with each component.
 std::string native_component_abi(const Json &definition, std::string_view guest);
 // Origin and pinned output digest for the source recipe or published release asset.
 Json native_component_origin(const Json &pins, const std::string &key, const Json &definition);

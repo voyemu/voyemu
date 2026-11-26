@@ -516,12 +516,8 @@ public final class PreparationMain {
                     "Owned receipt required",
                     3);
             Map<String, Object> proof = Json.object(Json.parse(Files.readString(receipt)));
-            var android = Json.obj(profile.data(), "android");
-            registeredApi30Base(android);
-            String sdkPackage = Json.str(android, "package");
-            String abi =
-                    Artifacts.nativeComponentAbi(
-                            definition, sdkPackage.substring(sdkPackage.lastIndexOf(';') + 1));
+            // The launcher decides the ABI of each component and passes it with the receipt.
+            String abi = Json.str(item, "abi");
             Failure.require(
                     Json.integer(proof, "schema") == 1
                             && "native".equals(proof.get("type"))

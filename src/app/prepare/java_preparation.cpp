@@ -586,6 +586,7 @@ static Json request_document(const std::filesystem::path &root,
         components[id] = {{"receipt", item.receipt.string()},
                           {"receipt_sha256", item.receipt_sha256},
                           {"output_type", output_type},
+                          {"abi", abi},
                           {"output", proof.at("output")},
                           {"sha256", proof.at("sha256")}};
     }

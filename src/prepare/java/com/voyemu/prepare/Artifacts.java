@@ -126,7 +126,6 @@ final class Artifacts {
         Map<String, Object> definition =
                 Json.object(Json.parse(Files.readString(source.resolve("component.json"))));
         long recipeApi = Json.integer(definition, "minSdk");
-        elf(file, nativeComponentAbi(definition, abi));
         Failure.require(
                 "native".equals(definition.get("type"))
                         && (recipeApi == 28 || recipeApi == 30)
@@ -1209,26 +1208,6 @@ final class Artifacts {
         }
 
         return result;
-    }
-
-    // A shared library must match the ABI of the process that loads it, including OEM binaries.
-    static String nativeComponentAbi(Map<String, Object> definition, String guestAbi) {
-        String wanted = Json.str(definition, "abi", guestAbi);
-
-        Failure.require(
-                (wanted.equals("arm64-v8a") || wanted.equals("x86_64"))
-                        && (wanted.equals(guestAbi)
-                                || ("x86_64".equals(guestAbi)
-                                        && "arm64-v8a".equals(wanted)
-                                        && "shared-library"
-                                                .equals(
-                                                        definition.getOrDefault(
-                                                                "outputType", "shared-library")))),
-                "PREPARATION_NATIVE_COMPONENT",
-                "Unsupported native component ABI for this guest",
-                3);
-
-        return wanted;
     }
 
     static void elf(Path path, String abi) throws Exception {

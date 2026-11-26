@@ -586,9 +586,13 @@ std::string native_component_pin(const std::string &profile, const std::string &
 
 std::string native_component_abi(const Json &definition, std::string_view guest) {
     const auto abi = definition.value("abi", std::string(guest));
+    // Native Bridge translates only shared libraries of ARM64 OEM processes in an x86_64 guest.
+    const bool bridged = guest == "x86_64" && abi == "arm64-v8a" &&
+                         definition.value("outputType", std::string("shared-library")) ==
+                                 "shared-library";
 
-    if (abi != "arm64-v8a" && abi != "x86_64") {
-        throw VoyemuError("COMPONENT_RECIPE", "unsupported native component ABI");
+    if ((abi != "arm64-v8a" && abi != "x86_64") || (abi != guest && !bridged)) {
+        throw VoyemuError("COMPONENT_RECIPE", "unsupported native component ABI for this guest");
     }
 
     return abi;
