@@ -1,11 +1,14 @@
 #include "native_component.hpp"
 #include "deps.hpp"
+#include "download.hpp"
+#include "os/https.hpp"
 #include "process.hpp"
 #include "profile_catalog.hpp"
 #include "qnx_link_interface.hpp"
 #include "source_edits.hpp"
 #include "toolchain_manifest.hpp"
 #include <array>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -590,8 +593,39 @@ int main(int argc, char **argv) {
         const auto direct = install_native_component(root, "private", "own", private_pins, true);
         check(std::filesystem::is_regular_file(direct.parent_path() / "libown.so"),
               "local profile remains directly buildable and installable");
+        bool malformed_pin = false;
+        try {
+            (void)install_native_component(root, "private", "own",
+                                           {{"private/own", {{"sha256", private_sha}}}}, true);
+        } catch (const VoyemuError &error) {
+            malformed_pin = error.code() == "COMPONENT_PIN";
+        }
+
+        check(malformed_pin, "a pin without its asset URL is a pin error");
+
+        // Without the developer NDK an unpublished asset reports why its download failed.
+        if (const char *ndk = std::getenv("NDK_HOME"); !ndk || !*ndk) {
+            const Json unpublished_pins{
+                    {"private/own",
+                     {{"sha256", std::string(64, 'b')},
+                      {"url", "https://example.invalid/private-own-libown.so"}}}};
+            std::string missing;
+            try {
+                (void)install_native_component(
+                        root, "private", "own", unpublished_pins, false,
+                        [](const DownloadPin &, const DownloadSink &) {
+                            throw os::HttpsFailure(os::HttpsFailure::Kind::status, 404, "fixture");
+                        });
+            } catch (const VoyemuError &error) {
+                missing = error.code() == "ANDROID_NATIVE_ASSET_MISSING" ? error.what() : "";
+            }
+
+            check(missing.find("cannot be downloaded (DOWNLOAD_HTTP") != std::string::npos,
+                  "the asset error keeps the download failure");
+        }
+
         // Materialize a different output with the same SONAME, for a process running x86_64.
-        const auto x86_component = root / "profiles/p_x86_64/components/own";
+        const auto x86_component = root / "profiles/x86/components/own";
         ensure_private_directory(x86_component / "src");
         std::filesystem::copy_file(private_binary, x86_component / "src/fixture.elf");
         {
@@ -608,7 +642,7 @@ int main(int argc, char **argv) {
                                          {"abi", "x86_64"},
                                          {"sourceBuildSha256", x86_sha}};
         write_private_json(x86_component / "component.json", x86_definition);
-        write_private_json(root / "profiles/p_x86_64/profile.json",
+        write_private_json(root / "profiles/x86/profile.json",
                            {{"local", true},
                             {"android", {{"package", "system-images;android-30;default;x86_64"}}},
                             {"components", {{"own", "components/own"}}}});
@@ -623,8 +657,8 @@ int main(int argc, char **argv) {
             std::filesystem::copy_file(root / "x86-compiler/libown.so", job / "libown.so");
         };
         const auto install_x86 = [&] {
-            return read_private_json(install_native_component(
-                    root, "p_x86_64", "own", Json::object(), true, {}, source_build));
+            return read_private_json(install_native_component(root, "x86", "own", Json::object(),
+                                                              true, {}, source_build));
         };
         const auto source_receipt = install_x86();
         check(source_receipt.at("source") == "recipe" && !source_receipt.contains("asset") &&

@@ -70,6 +70,25 @@ Json source_inventory(const std::filesystem::path &source) {
     return files;
 }
 
+// The ELF e_machine and the clang target architecture of each supported native component ABI.
+struct NativeAbi {
+    std::string_view abi;
+    unsigned char machine;
+    std::string_view architecture;
+};
+
+constexpr NativeAbi native_abis[] = {{"arm64-v8a", 183, "aarch64"}, {"x86_64", 62, "x86_64"}};
+
+const NativeAbi &native_abi(std::string_view abi) {
+    for (const auto &entry : native_abis) {
+        if (entry.abi == abi) {
+            return entry;
+        }
+    }
+
+    throw VoyemuError("COMPONENT_RECIPE", "unsupported native component ABI");
+}
+
 void valid_output_name(const std::string &output, bool executable) {
     if (executable ? (!std::regex_match(output, std::regex(R"(^[A-Za-z0-9_][A-Za-z0-9_-]*$)")))
                    : (!std::regex_match(output, std::regex(R"(^lib[A-Za-z0-9_]+\.so$)")))) {
@@ -88,8 +107,7 @@ void elf(const std::filesystem::path &file, std::string_view abi, bool executabl
     input.read(reinterpret_cast<char *>(h), sizeof h);
 
     if (!input || h[0] != 127 || h[1] != 'E' || h[2] != 'L' || h[3] != 'F' || h[4] != 2 ||
-        h[5] != 1 || h[16] != 3 || h[17] != 0 || h[18] != (abi == "x86_64" ? 62 : 183) ||
-        h[19] != 0) {
+        h[5] != 1 || h[16] != 3 || h[17] != 0 || h[18] != native_abi(abi).machine || h[19] != 0) {
         throw VoyemuError("COMPONENT_ELF", std::string(abi) + " ELF required");
     }
 
@@ -296,8 +314,8 @@ Json build_native_component(const std::filesystem::path &source,
     }
 
     const auto abi = native_component_abi(definition, guest_abi);
-    const auto target = "--target=" + std::string(abi == "x86_64" ? "x86_64" : "aarch64") +
-                        "-linux-android" + std::to_string(recipe_api);
+    const auto target = "--target=" + std::string(native_abi(abi).architecture) + "-linux-android" +
+                        std::to_string(recipe_api);
     Json materialized = Json::object();
     std::set<std::string> guest_sonames;
 
@@ -585,13 +603,13 @@ std::string native_component_pin(const std::string &profile, const std::string &
 }
 
 std::string native_component_abi(const Json &definition, std::string_view guest) {
-    const auto abi = definition.value("abi", std::string(guest));
+    const auto abi = std::string(native_abi(definition.value("abi", std::string(guest))).abi);
     // Native Bridge translates only shared libraries of ARM64 OEM processes in an x86_64 guest.
     const bool bridged = guest == "x86_64" && abi == "arm64-v8a" &&
                          definition.value("outputType", std::string("shared-library")) ==
                                  "shared-library";
 
-    if ((abi != "arm64-v8a" && abi != "x86_64") || (abi != guest && !bridged)) {
+    if (abi != guest && !bridged) {
         throw VoyemuError("COMPONENT_RECIPE", "unsupported native component ABI for this guest");
     }
 
@@ -609,9 +627,18 @@ Json native_component_origin(const Json &pins, const std::string &key, const Jso
         throw VoyemuError("COMPONENT_PIN", "missing native component pin: " + key);
     }
 
-    auto origin = local ? Json{{"source", "recipe"}, {"sha256", definition.at("sourceBuildSha256")}}
-                        : Json{{"asset", pins.at(key).at("url")},
-                               {"sha256", pins.at(key).at("sha256")}};
+    constexpr Check need{"COMPONENT_PIN"};
+    Json origin;
+
+    if (local) {
+        origin = {{"source", "recipe"}, {"sha256", definition.at("sourceBuildSha256")}};
+    } else {
+        const auto &pin = pins.at(key);
+        need(pin.is_object() && pin.contains("url") && pin.at("url").is_string() &&
+                     pin.contains("sha256"),
+             "invalid native component pin: " + key);
+        origin = {{"asset", pin.at("url")}, {"sha256", pin.at("sha256")}};
+    }
 
     if (!origin.at("sha256").is_string() || !sha256_text(origin.at("sha256").get<std::string>())) {
         throw VoyemuError("COMPONENT_PIN", "invalid native component SHA-256: " + key);
@@ -764,7 +791,7 @@ install_native_component(const std::filesystem::path &root, const std::string &p
                          const DownloadTransport &transport,
                          const std::function<void(const std::filesystem::path &)> &build,
                          std::string_view guest_abi) {
-    const std::regex keys(R"(^[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9-]*$)");
+    const std::regex keys(R"(^[a-z0-9][a-z0-9.-]*/[a-z0-9][a-z0-9-]*$)");
 
     if (!std::regex_match(profile + "/" + component, keys)) {
         throw VoyemuError("COMPONENT_PATH", "invalid native component key");
@@ -806,6 +833,7 @@ install_native_component(const std::filesystem::path &root, const std::string &p
         const auto temporary = folder / (".part-" + random_token());
 
         bool from_recipe = origin.contains("source");
+        std::string download_failure;
 
         if (!from_recipe) {
             try {
@@ -817,11 +845,13 @@ install_native_component(const std::filesystem::path &root, const std::string &p
                 std::filesystem::copy_file(blob, temporary);
                 logging::write(logging::Level::debug, "prepare", "native component downloaded",
                                {{"component", key}, {"sha256", sha}});
-            } catch (const std::runtime_error &) {
+            } catch (const std::runtime_error &error) {
+                // Only an asset that is not published falls back; a network failure stays an error.
                 if (offline || !download_unpublished(std::current_exception())) {
                     throw;
                 }
 
+                download_failure = error.what();
                 from_recipe = true;
             }
         }
@@ -850,12 +880,16 @@ install_native_component(const std::filesystem::path &root, const std::string &p
 
                 if (!std::filesystem::exists(clang)) {
                     throw VoyemuError("ANDROID_NATIVE_ASSET_MISSING",
-                                      "building " + key + " requires the pinned developer NDK");
+                                      (download_failure.empty()
+                                               ? "building " + key
+                                               : "the " + key + " asset cannot be downloaded (" +
+                                                         download_failure + "); building it") +
+                                              " requires the pinned NDK of the developer tools");
                 }
 
                 logging::write(logging::Level::info, "prepare",
                                "native component built from the recipe",
-                               {{"component", key}, {"abi", abi}});
+                               {{"component", key}, {"abi", abi}, {"download", download_failure}});
                 const auto compiler = std::filesystem::canonical(clang);
                 built = build_profile_native_component(root, profile, component, compiler,
                                                        sha256_file(compiler), job, offline);
