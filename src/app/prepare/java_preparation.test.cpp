@@ -738,9 +738,12 @@ int main(int argc, char **argv) {
         request.profile = qinggan09_profile();
         request.profile_sha256 = sha256_file(root / "profiles" / request.profile / "profile.json");
         const auto plan = java_preparation_request(root, request);
-        check(plan.size() == 5 && plan.at("schema") == 1 && plan.at("operation") == "plan" &&
+        check(plan.size() == 6 && plan.at("schema") == 1 && plan.at("operation") == "plan" &&
               plan.at("root") == root.string() && !plan.contains("tools") &&
               !plan.contains("work"));
+        // A profile without build targets travels as its exact authoring bytes.
+        check(sha256_bytes(plan.at("resolved_profile").get<std::string>()) ==
+              request.profile_sha256);
         auto reject = [&](const std::filesystem::path &selected,
                           const JavaPreparationRequest &input) {
             bool failed = false;

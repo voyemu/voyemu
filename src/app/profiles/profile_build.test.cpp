@@ -660,10 +660,9 @@ static void artifact_resume_checks(const std::filesystem::path &root, bool equip
                            {{"archive_sha256", base_pin}, {"package", x86_base.at("package")}});
         const Json selected = {{"name", "x86"}, {"abi", "x86_64"}, {"base_sha256", base_pin}};
         auto selected_request = request, selected_result = result, selected_receipt = receipt;
-        selected_request["target"] = selected;
-        selected_request["android_base"] = x86_base;
+        selected_request["resolved_profile"] = authoring_profile_bytes(root, profile, "x86");
         selected_request["profile_sha256"] =
-                sha256_bytes(authoring_profile_bytes(root, profile, "x86"));
+                sha256_bytes(selected_request.at("resolved_profile").get<std::string>());
         selected_result["target"] = selected;
         selected_receipt["target"] = selected;
         selected_receipt["base"] = selected_base.string();
@@ -711,7 +710,7 @@ static void artifact_resume_checks(const std::filesystem::path &root, bool equip
         reject_selected(publish(selected_request, altered, selected_receipt),
                         "prepared artifact profile source closure changed");
         altered = selected_request;
-        altered["android_base"]["sha256"] = arm_base.at("sha256");
+        altered["resolved_profile"] = authoring_profile_bytes(root, profile, "arm");
         reject_selected(publish(altered, selected_result, selected_receipt),
                         "prepared request target or pinned Android base differs");
 

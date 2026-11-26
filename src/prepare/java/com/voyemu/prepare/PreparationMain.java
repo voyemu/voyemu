@@ -575,69 +575,21 @@ public final class PreparationMain {
         return path;
     }
 
-    private static void verifyRequestedProfile(
-            Path root,
-            ProfileRegistry.Profile profile,
-            Map<String, Object> request,
-            String operation)
+    /** The definition the launcher resolved and pinned; the helper never resolves a target. */
+    private static Map<String, Object> requestedProfile(Map<String, Object> request)
             throws Exception {
+        byte[] bytes = Json.str(request, "resolved_profile").getBytes(StandardCharsets.UTF_8);
         Failure.require(
-                !operation.equals("build-artifacts") || !profile.data().containsKey("targets"),
-                "PROFILE_TARGET",
-                "Artifact preparation requires an explicit resolved target",
-                2);
-        String profileSha;
-
-        var target = targetIdentity(profile);
-
-        if (!target.isEmpty()) {
-            Failure.require(
-                    target.equals(Json.obj(request, "target"))
-                            && Json.obj(profile.data(), "android")
-                                    .equals(Json.obj(request, "android_base")),
-                    "PREPARATION_PROFILE_PIN",
-                    "Requested target, ABI or Android base differs from profile",
-                    3);
-        } else {
-            Failure.require(
-                    !request.containsKey("target") && !request.containsKey("android_base"),
-                    "PREPARATION_PROFILE_PIN",
-                    "Unexpected target or Android base",
-                    3);
-        }
-
-        if (!target.isEmpty()) {
-            String effective = Json.str(request, "resolved_profile");
-            byte[] bytes = effective.getBytes(StandardCharsets.UTF_8);
-            Failure.require(
-                    bytes.length <= 1024 * 1024
-                            && profile.data().equals(Json.object(Json.parse(effective))),
-                    "PREPARATION_PROFILE_PIN",
-                    "Resolved profile differs from selected recipe or SDK base",
-                    3);
-            profileSha = NativeCore.hash(bytes);
-        } else {
-            Failure.require(
-                    !request.containsKey("resolved_profile"),
-                    "PREPARATION_PROFILE_PIN",
-                    "Unexpected resolved profile",
-                    3);
-            profileSha =
-                    FilesSupport.hash(root.resolve("profiles/" + profile.id() + "/profile.json"));
-        }
-
-        Failure.require(
-                profileSha.equals(Json.str(request, "profile_sha256")),
+                bytes.length <= 1024 * 1024
+                        && NativeCore.hash(bytes).equals(Json.str(request, "profile_sha256")),
                 "PREPARATION_PROFILE_PIN",
                 "Profile differs from request pin",
                 3);
+
+        return Json.object(Json.parse(new String(bytes, StandardCharsets.UTF_8)));
     }
 
     private static Map<String, Object> targetIdentity(ProfileRegistry.Profile profile) {
-        if (!profile.data().containsKey("target")) {
-            return Map.of();
-        }
-
         var target = Json.obj(profile.data(), "target");
 
         return Map.of(
@@ -659,19 +611,15 @@ public final class PreparationMain {
                 "Expected plan or build-artifacts",
                 2);
         Path root = absolute(Json.str(request, "root"));
-        String target =
-                request.containsKey("target")
-                        ? Json.str(Json.obj(request, "target"), "name")
-                        : null;
-        ProfileRegistry registry = new ProfileRegistry(root, Json.str(request, "profile"), target);
+        ProfileRegistry registry =
+                new ProfileRegistry(root, Json.str(request, "profile"), requestedProfile(request));
         ProfileRegistry.Profile profile = registry.get(Json.str(request, "profile"));
-        verifyRequestedProfile(root, profile, request, operation);
         Map<String, Object> plan = new LinkedHashMap<>();
         plan.put("schema", 1);
         plan.put("operation", operation);
         plan.put("profile", profile.id());
 
-        if (target != null) {
+        if (profile.data().containsKey("target")) {
             plan.put("target", targetIdentity(profile));
         }
 

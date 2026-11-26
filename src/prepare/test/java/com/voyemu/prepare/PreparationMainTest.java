@@ -15,62 +15,59 @@ public final class PreparationMainTest {
 
     private static void checkTarget(Path root, Path recipe, Map<String, Object> original)
             throws Exception {
-        String parent = recipe.getFileName().toString();
+        String id = recipe.getFileName().toString();
         Map<String, Object> definition = new LinkedHashMap<>(original);
-        definition.putAll(
-                Map.of(
-                        "id",
-                        parent,
-                        "android",
-                        Map.of("package", "system-images;android-30;default;arm64-v8a"),
-                        "emulator",
-                        Map.of("memory", 2048)));
-        Path descriptor =
-                Files.createDirectories(root.resolve("profiles/common/android-bases"))
-                        .resolve("test-base.json");
-        var base =
-                Map.of(
-                        "package",
-                        "system-images;android-30;default;x86_64",
-                        "clean_base",
-                        Map.of(),
-                        "features",
-                        Map.of("MultiDisplay", "on"));
-        var request =
-                new LinkedHashMap<String, Object>(
-                        Map.of("schema", 1, "operation", "plan", "root", root.toString()));
         definition.put(
                 "targets",
                 Map.of(
-                        "arm", Map.of("guestAbi", "arm64-v8a", "preparation", "sdk"),
-                        "x86",
-                                Map.of(
-                                        "guestAbi", "x86_64",
-                                        "preparation", "signed-offline",
-                                        "androidBase", "test-base",
-                                        "emulator",
-                                                Map.of("acceleration", "kvm", "gpuMode", "host"))));
+                        "first", Map.of("guestAbi", "arm64-v8a"),
+                        "second", Map.of("guestAbi", "x86_64", "androidBase", "test-base")));
         Files.writeString(recipe.resolve("profile.json"), Json.write(definition));
-        var pinnedBase = new LinkedHashMap<String, Object>(base);
-        pinnedBase.put("sha256", "1".repeat(64));
-        Files.writeString(descriptor, Json.write(pinnedBase));
-        var targetRegistry = new ProfileRegistry(root, parent, "x86");
-        var selected = targetRegistry.get(parent).data();
+        Files.createDirectories(root.resolve("profiles/common/android-bases"));
+        Files.writeString(
+                root.resolve("profiles/common/android-bases/test-base.json"),
+                Json.write(Map.of("package", "test")));
+        // The launcher resolves the target; the helper takes the pinned definition as it is.
+        Map<String, Object> resolved = new LinkedHashMap<>(original);
+        resolved.put(
+                "target",
+                Map.of("name", "second", "guestAbi", "x86_64", "androidBase", "test-base"));
+        resolved.put("android", Map.of("sha256", "1".repeat(64)));
+        String bytes = Json.write(resolved) + "\n";
+        var request =
+                new LinkedHashMap<String, Object>(
+                        Map.of(
+                                "schema",
+                                1,
+                                "operation",
+                                "plan",
+                                "root",
+                                root.toString(),
+                                "profile",
+                                id,
+                                "resolved_profile",
+                                bytes,
+                                "profile_sha256",
+                                NativeCore.hash(
+                                        bytes.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
         check(
-                targetRegistry.sourceDirectory(targetRegistry.get(parent)).equals(recipe)
-                        && selected.get("original").equals(definition.get("original")),
-                "resolved target retains the canonical OEM source");
-        var targetIdentity = Map.of("name", "x86", "abi", "x86_64", "base_sha256", "1".repeat(64));
-        var resolved = Json.write(selected);
-        request.put("profile", parent);
-        request.put("resolved_profile", resolved);
-        request.put(
-                "profile_sha256",
-                NativeCore.hash(resolved.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-        request.put("target", targetIdentity);
-        request.put("android_base", Json.obj(selected, "android"));
-        check(PreparationMain.run(request).get("target").equals(targetIdentity), "target plan");
-        request.put("android_base", Json.obj(definition, "android"));
+                PreparationMain.run(request)
+                        .get("target")
+                        .equals(
+                                Map.of(
+                                        "name",
+                                        "second",
+                                        "abi",
+                                        "x86_64",
+                                        "base_sha256",
+                                        "1".repeat(64))),
+                "plan follows the resolved target of the request");
+        var registry = new ProfileRegistry(root, id, resolved);
+        check(
+                registry.get(id).data().equals(resolved)
+                        && registry.sourceDirectory(registry.get(id)).equals(recipe),
+                "resolved definition keeps the canonical recipe directory");
+        request.put("resolved_profile", Json.write(original));
         boolean rejected = false;
 
         try {
@@ -79,7 +76,7 @@ public final class PreparationMainTest {
             rejected = failure.code.equals("PREPARATION_PROFILE_PIN");
         }
 
-        check(rejected, "selected ABI cannot reuse another target's Android base");
+        check(rejected, "resolved definition differing from its pin was accepted");
     }
 
     public static void main(String[] args) throws Exception {
@@ -127,6 +124,8 @@ public final class PreparationMainTest {
                                     root.toString(),
                                     "profile",
                                     id,
+                                    "resolved_profile",
+                                    Files.readString(json),
                                     "profile_sha256",
                                     FilesSupport.hash(json)));
             Map<String, Object> result = PreparationMain.run(request);

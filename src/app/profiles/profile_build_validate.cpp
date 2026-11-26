@@ -453,10 +453,9 @@ Json validate_profile_artifact_resume(const std::filesystem::path &root, std::st
              "prepared request identity differs");
 
         if (!target.empty()) {
-            need(request.at("target") == identity &&
-                         request.at("android_base") == definition.at("android") &&
-                         request.at("profile_sha256") ==
-                                 sha256_bytes(authoring_profile_bytes(root, profile, target)),
+            const auto bytes = authoring_profile_bytes(root, profile, target);
+            need(request.at("resolved_profile") == bytes &&
+                         request.at("profile_sha256") == sha256_bytes(bytes),
                  "prepared request target or pinned Android base differs");
         }
 

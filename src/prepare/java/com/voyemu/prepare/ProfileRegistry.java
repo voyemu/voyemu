@@ -122,10 +122,21 @@ final class ProfileRegistry {
      * changes status.
      */
     ProfileRegistry(Path root, String preparationProfile) throws Exception {
-        this(root, preparationProfile, null);
+        this(root, preparationProfile, (Map<String, Object>) null);
     }
 
-    ProfileRegistry(Path root, String preparationProfile, String target) throws Exception {
+    /**
+     * Host source preparation of one profile whose definition the launcher resolved for its build
+     * target: the helper takes that definition as it is and resolves no target itself.
+     */
+    ProfileRegistry(Path root, String preparationProfile, Map<String, Object> resolved)
+            throws Exception {
+        Failure.require(
+                resolved == null || preparationProfile != null,
+                "PROFILE_INVALID",
+                "A resolved definition belongs to one selected profile",
+                2);
+
         if (preparationProfile != null) {
             validId(preparationProfile);
         }
@@ -159,9 +170,8 @@ final class ProfileRegistry {
                     continue;
                 } // Draft profiles have no executable definition.
 
-                Map<String, Object> source = readDefinition(definition);
                 Map<String, Object> data =
-                        target == null ? source : resolveTarget(root, id, source, target);
+                        resolved == null ? readDefinition(definition) : resolved;
                 String status = (String) data.getOrDefault("status", "ready");
 
                 if (!"ready".equals(status)
@@ -205,91 +215,6 @@ final class ProfileRegistry {
         validId(name);
 
         return Storage.confined(root, "profiles/common/android-bases/" + name + ".json");
-    }
-
-    private static boolean variantEmulator(Map<String, Object> emulator) {
-        var allowed = Set.of("acceleration", "gpuMode", "memory", "audioOutput");
-
-        return allowed.containsAll(emulator.keySet())
-                && "kvm".equals(emulator.get("acceleration"))
-                && "host".equals(emulator.get("gpuMode"))
-                && emulator.getOrDefault("audioOutput", false) instanceof Boolean
-                && (!emulator.containsKey("memory")
-                        || (emulator.get("memory") instanceof Long
-                                && Json.integer(emulator, "memory") >= 512
-                                && Json.integer(emulator, "memory") <= 16384));
-    }
-
-    private static Map<String, Object> resolveTarget(
-            Path root, String id, Map<String, Object> source, String name) throws Exception {
-        var catalogue = Json.obj(source, "targets");
-        var android = Json.obj(source, "android");
-        boolean x86 = "x86".equals(name);
-        String abi = x86 ? "x86_64" : "arm64-v8a";
-        String preparation = x86 ? "signed-offline" : "sdk";
-
-        Failure.require(
-                id.equals(source.get("id"))
-                        && !source.containsKey("target")
-                        && catalogue.keySet().equals(Set.of("arm", "x86"))
-                        && catalogue.containsKey(name)
-                        && "system-images;android-30;default;arm64-v8a"
-                                .equals(android.get("package")),
-                "PROFILE_TARGET",
-                "Invalid Android target catalogue",
-                2);
-        var entry = Json.obj(catalogue, name);
-        Failure.require(
-                entry.keySet()
-                                .equals(
-                                        x86
-                                                ? Set.of(
-                                                        "guestAbi",
-                                                        "preparation",
-                                                        "androidBase",
-                                                        "emulator")
-                                                : Set.of("guestAbi", "preparation"))
-                        && abi.equals(entry.get("guestAbi"))
-                        && preparation.equals(entry.get("preparation")),
-                "PROFILE_TARGET",
-                "Target ABI or preparation differs",
-                2);
-        var resolved = new LinkedHashMap<>(source);
-        var target =
-                new LinkedHashMap<String, Object>(
-                        Map.of("name", name, "guestAbi", abi, "preparation", preparation));
-
-        if (x86) {
-            var base = readDefinition(androidBase(root, entry));
-            var emulator = Json.obj(entry, "emulator");
-            Failure.require(
-                    variantEmulator(emulator)
-                            && "system-images;android-30;default;x86_64".equals(base.get("package"))
-                            && base.containsKey("clean_base")
-                            && !base.containsKey("development_kernel"),
-                    "PROFILE_TARGET",
-                    "X86 target requires a pinned API30 SDK base and KVM settings",
-                    2);
-            var features = Json.object(android.getOrDefault("features", Map.of()));
-
-            if (!features.isEmpty()) {
-                var combined =
-                        new LinkedHashMap<>(Json.object(base.getOrDefault("features", Map.of())));
-                combined.putAll(features);
-                base.put("features", combined);
-            }
-
-            resolved.put("android", base);
-            var settings = new LinkedHashMap<>(Json.obj(source, "emulator"));
-            settings.putAll(emulator);
-            resolved.put("emulator", settings);
-            target.put("androidBase", Json.str(entry, "androidBase"));
-        }
-
-        resolved.remove("targets");
-        resolved.put("target", target);
-
-        return resolved;
     }
 
     private static Map<String, String> inventory(Path root, String id, Map<String, Object> data)

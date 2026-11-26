@@ -66,12 +66,18 @@ void pinned(const std::filesystem::path &p, const std::string &hash,
     need(sha256_file(p) == hash && cache_file_identity(p) == epoch, "input SHA/epoch mismatch");
 }
 
-Json pinned_profile(const std::filesystem::path &root, const JavaPreparationRequest &request) {
-    const auto bytes = authoring_profile_bytes(root, request.profile, request.target);
+// The profile with its selected build target resolved, as the request pins it.
+std::string pinned_profile_bytes(const std::filesystem::path &root,
+                                 const JavaPreparationRequest &request) {
+    auto bytes = authoring_profile_bytes(root, request.profile, request.target);
 
     need(sha256_bytes(bytes) == request.profile_sha256, "authoring profile changed");
 
-    return Json::parse(bytes);
+    return bytes;
+}
+
+Json pinned_profile(const std::filesystem::path &root, const JavaPreparationRequest &request) {
+    return Json::parse(pinned_profile_bytes(root, request));
 }
 
 std::set<std::string> keys(const Json &obj) {
@@ -413,24 +419,15 @@ static Json request_document(const std::filesystem::path &root,
     path(root);
     need(std::filesystem::is_directory(root) && valid_profile_name(request.profile),
          "project/profile required");
-    const auto profile = pinned_profile(root, request);
+    // The helper builds the profile from these exact bytes and never resolves a target itself.
+    auto bytes = pinned_profile_bytes(root, request);
+    const auto profile = Json::parse(bytes);
     need(profile.at("schema") == 1, "profile schema");
     Json result = {{"schema", 1},
                    {"root", root.string()},
                    {"profile", request.profile},
-                   {"profile_sha256", request.profile_sha256}};
-
-    if (profile.contains("target")) {
-        result["target"] = profile_target_identity(profile);
-        result["android_base"] = profile.at("android");
-    }
-
-    if (profile.contains("target")) {
-        result["resolved_profile"] = authoring_profile_bytes(root, request.profile, request.target);
-        need(sha256_bytes(result.at("resolved_profile").get_ref<const std::string &>()) ==
-                     request.profile_sha256,
-             "build target changed before Java preparation");
-    }
+                   {"profile_sha256", request.profile_sha256},
+                   {"resolved_profile", std::move(bytes)}};
 
     if (request.operation == JavaPreparationOperation::plan) {
         need(!request.build, "plan may not contain build inputs");
@@ -443,6 +440,7 @@ static Json request_document(const std::filesystem::path &root,
                  request.build.has_value(),
          "typed build operation/inputs required");
     result["operation"] = "build-artifacts";
+    need(!profile.contains("targets"), "artifact preparation requires a selected build target");
     const auto &b = request.build.value();
     path(b.sdk);
     path(b.work);
