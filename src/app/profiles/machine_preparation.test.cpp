@@ -1329,7 +1329,8 @@ static int failure_adb_child(int argc, char **argv) {
                 return 1;
             }
 
-            if (mode == "root-closed") {
+            if (mode == "root-closed" || mode == "root-device-missing" ||
+                mode == "root-foreign-serial") {
                 std::ofstream(state) << 1;
                 std::cout << "adb: unable to connect for root: closed\n";
 
@@ -1369,6 +1370,15 @@ static int failure_adb_child(int argc, char **argv) {
             if (step == 1 && mode == "root-offline") {
                 std::ofstream(state) << 2;
                 std::cout << "adb: device offline\n";
+
+                return 1;
+            }
+
+            if (step == 1 && (mode == "root-device-missing" || mode == "root-foreign-serial")) {
+                std::ofstream(state) << 2;
+                std::cout << "adb: device '"
+                          << (mode == "root-device-missing" ? argv[2] : "emulator-0")
+                          << "' not found\n";
 
                 return 1;
             }
@@ -1656,12 +1666,26 @@ static void root_transition_fixture(const std::filesystem::path &self,
         candidate.deadline = saved;
     }
 
-    for (const auto *mode :
-         {"root-transition", "root-start-change", "root-quiet", "root-closed", "root-offline",
-          "root-offline-nochange", "root-offline-wrong-nonce", "root-already", "root-nochange",
-          "root-wrong-nonce", "root-changed-boot", "root-protocol", "root-permission",
-          "root-request-denied", "root-request-failed", "root-inconsistent", "root-cancelled",
-          "root-owner-lost"}) {
+    for (const auto *mode : {"root-transition",
+                             "root-start-change",
+                             "root-quiet",
+                             "root-closed",
+                             "root-offline",
+                             "root-offline-nochange",
+                             "root-offline-wrong-nonce",
+                             "root-device-missing",
+                             "root-foreign-serial",
+                             "root-already",
+                             "root-nochange",
+                             "root-wrong-nonce",
+                             "root-changed-boot",
+                             "root-protocol",
+                             "root-permission",
+                             "root-request-denied",
+                             "root-request-failed",
+                             "root-inconsistent",
+                             "root-cancelled",
+                             "root-owner-lost"}) {
         for (const auto *file : {"root-step", "root-requests", "snapshots"}) {
             std::filesystem::remove(stage / file);
         }
@@ -1698,12 +1722,14 @@ static void root_transition_fixture(const std::filesystem::path &self,
                              std::string_view(mode) == "root-quiet" ||
                              std::string_view(mode) == "root-closed" ||
                              std::string_view(mode) == "root-offline" ||
+                             std::string_view(mode) == "root-device-missing" ||
                              std::string_view(mode) == "root-already";
         check(success == failure.empty());
 
         if (std::string_view(mode) == "root-transition" ||
             std::string_view(mode) == "root-start-change" ||
-            std::string_view(mode) == "root-offline") {
+            std::string_view(mode) == "root-offline" ||
+            std::string_view(mode) == "root-device-missing") {
             candidate.shell({"configure-barrier"});
         }
 
@@ -1724,6 +1750,10 @@ static void root_transition_fixture(const std::filesystem::path &self,
 
         if (std::string_view(mode) == "root-offline-nochange") {
             check(failure.find("timeout rooted adbd lifetime transition") != std::string::npos);
+        }
+
+        if (std::string_view(mode) == "root-foreign-serial") {
+            check(failure.find("adb: device 'emulator-0' not found") != std::string::npos);
         }
 
         if (std::string_view(mode) == "root-offline-wrong-nonce") {
