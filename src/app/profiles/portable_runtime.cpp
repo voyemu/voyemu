@@ -1713,12 +1713,9 @@ void check_android_guest_identity(const Json &definition, const Json &manifest) 
     if (definition.contains("target") || android.contains("target")) {
         const std::string_view name = identity.abi == "x86_64" ? "x86" : "arm";
         const auto target = definition.value("target", Json::object());
-        // An ARM system upgrade can retain a machine that predates explicit targets.
-        const bool legacy_upgrade = !android.contains("target") && identity.abi == "arm64-v8a" &&
-                                    android.contains("system_upgrade");
         need(target.value("name", std::string{}) == name &&
                      target.value("guestAbi", std::string{}) == identity.abi &&
-                     (legacy_upgrade || android.value("target", std::string{}) == name),
+                     android.value("target", std::string{}) == name,
              "portable Android target differs from its profile snapshot");
     }
 }
