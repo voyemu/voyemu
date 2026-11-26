@@ -322,6 +322,23 @@ int main() try {
         validate_passion_power_candidate(x86_definition, unsigned_candidate, signed_images,
                                          std::string(64, 'c'));
     });
+
+    // A missing field of the signed guest fails with the code of its caller.
+    for (const auto &path :
+         {"/android/abi", "/android/images/vendor.img", "/signed_android/files/vendor.img/bytes"}) {
+        auto incomplete = x86_candidate;
+        const Json::json_pointer pointer(path);
+        incomplete[pointer.parent_pointer()].erase(pointer.back());
+        bool coded = false;
+        try {
+            (void)passion_prepared_guest_abi(x86_definition, incomplete, power_need);
+        } catch (const VoyemuError &error) {
+            coded = error.code() == power_need.code;
+        }
+
+        assert(coded);
+    }
+
     auto wrong_cold_abi = x86_candidate;
     wrong_cold_abi["checks"][2]["expected"] = wrong_cold_abi["checks"][2]["actual"] = "arm64-v8a";
     rejects([&] {
