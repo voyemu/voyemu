@@ -415,6 +415,10 @@ int main(int argc, char **argv) try {
         auto profile = root / "profiles" / qinggan09_profile();
         ensure_private_directory(profile);
         ensure_private_directory(root / "profiles/common/wheels/free-2021");
+        // The fixture machine boots the stock kernel of its base and declares no development
+        // kernel in its manifest, so its profile declares none either.
+        auto fixture_android = embedded_profile(qinggan09_profile()).at("definition").at("android");
+        fixture_android.erase("development_kernel");
         write_private_json(
                 profile / "profile.json",
                 {{"schema", 1},
@@ -427,7 +431,7 @@ int main(int argc, char **argv) try {
                                            .value("initial_state", Json::object())},
                  {"displays",
                   embedded_profile(qinggan09_profile()).at("definition").at("displays")},
-                 {"android", embedded_profile(qinggan09_profile()).at("definition").at("android")},
+                 {"android", fixture_android},
                  {"wheel", {{"assets", "profiles/common/wheels/free-2021"}}}});
         auto help = run({"help"});
         require(help.exit_code == 0 && help.output.find("--cluster=on|off") != std::string::npos &&
