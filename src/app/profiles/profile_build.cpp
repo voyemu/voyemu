@@ -16,19 +16,8 @@ std::filesystem::path signed_filesystem_recipe(const std::filesystem::path &root
         return {};
     }
 
-    auto recipe = root / "profiles" / std::string(profile);
-
-    if (definition.contains("target")) {
-        recipe /= "targets/x86";
-    }
-
-    const auto file = recipe / "filesystems.json";
-
-    if (!definition.contains("target") &&
-        !std::filesystem::exists(std::filesystem::symlink_status(file))) {
-        return {};
-    }
-
+    const auto file = authoring_directory(root, profile) / "targets" /
+                      definition.at("target").at("name").get<std::string>() / "filesystems.json";
     ordinary(file);
     need(std::filesystem::is_regular_file(file), "offline filesystem recipe is missing");
 
@@ -82,10 +71,10 @@ SignedAndroidInput build_signed_profile_image(const std::filesystem::path &root,
     const auto display_id = filesystem_recipe.find("buildDisplayId");
     need(display_id == filesystem_recipe.end() || display_id->is_string(),
          "buildDisplayId must be a string");
-    const auto &selection = definition.at(definition.contains("target") ? "target" : "variant");
+    const auto &selection = definition.at("target");
     const auto base_name = selection.at("androidBase").get<std::string>();
     need(valid_profile_name(base_name) && android_kvm(definition),
-         "offline Android image requires a registered Linux x86_64 SDK variant");
+         "offline Android image requires a target with a registered x86_64 SDK base");
     const auto base = root / "profiles/common/android-bases" / (base_name + ".json");
     const auto scripts = signed_android_tools(root);
     const auto job = root / ".local/build/jobs" / ("signed-android-" + random_token());
@@ -98,14 +87,9 @@ SignedAndroidInput build_signed_profile_image(const std::filesystem::path &root,
     };
     const auto input_receipt = artifacts.transport / "profile-artifacts.json";
     auto filesystems = job / "filesystems";
-    std::vector<std::string> filesystem_args{std::string(profile), input_receipt.string(),
-                                             hash(input_receipt, 1 << 20), filesystems.string()};
-
-    if (definition.contains("target")) {
-        filesystem_args.push_back(selection.at("name").get<std::string>());
-    }
-
-    tool("build-filesystems.sh", std::move(filesystem_args));
+    tool("build-filesystems.sh",
+         {std::string(profile), input_receipt.string(), hash(input_receipt, 1 << 20),
+          filesystems.string(), selection.at("name").get<std::string>()});
 
     if (std::filesystem::exists(std::filesystem::symlink_status(bridge))) {
         ordinary(bridge);
@@ -362,7 +346,7 @@ namespace profile_build_detail {
 std::function<void()> capture_authoring_inputs(const std::filesystem::path &root,
                                                std::string_view profile) {
     const auto definition_file = authoring_definition(root, profile),
-               qnx_file = profile_recipe_directory(root, profile) / "profile-qnx.json";
+               qnx_file = authoring_directory(root, profile) / "profile-qnx.json";
     const auto name = std::string(profile);
     const auto definition_epoch = cache_file_identity(definition_file),
                qnx_epoch = cache_file_identity(qnx_file);
@@ -1132,12 +1116,11 @@ Json build_profile(const std::filesystem::path &root, std::string_view profile,
 
     if (profile_multimedia_only(definition)) {
         need(!cluster && multimedia && reuse_qnx.empty(),
-             "vehicle SDK variant supports multimedia only");
+             "selected target supports multimedia only");
     }
 
-    const auto jdk = profile_preparation_jdk(root, requested_jdk, definition.contains("variant"),
-                                             embedded_toolchain_manifest().at("javaHelper"),
-                                             !selected.empty());
+    const auto jdk = profile_preparation_jdk(
+            root, requested_jdk, embedded_toolchain_manifest().at("javaHelper"), !selected.empty());
 
     if (std::filesystem::exists(build_target(root, profile, machine)) &&
         profile_feature(definition, "system_upgrade") && !cluster) {

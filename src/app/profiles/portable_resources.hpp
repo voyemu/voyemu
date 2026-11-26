@@ -84,7 +84,7 @@ inline StartupVideoPin startup_video_pin(const Json &video) {
 inline std::string portable_startup_video(const std::filesystem::path &root,
                                           std::string_view profile, const StartupVideoPin &video) {
     const auto &image = video.image, &nested = video.nested;
-    const auto recipe = profile_recipe_directory(root, profile);
+    const auto recipe = authoring_directory(root, profile);
     const auto qnx = read_private_json(recipe / "profile-qnx.json", 128 * 1024);
     const auto &original = qnx.at("originals").at(image);
     auto key = image;

@@ -125,7 +125,7 @@ std::string file_pin(const std::filesystem::path &p, std::size_t bound) {
 Json plan_profile_patch_graph(const std::filesystem::path &root, std::string_view profile) {
     ordinary(root);
     need(valid_profile_name(profile), "safe profile name required");
-    const auto directory = profile_recipe_directory(root, profile);
+    const auto directory = authoring_directory(root, profile);
     const auto checked_definition = [&] {
         return authoring_profile_bytes(root, profile, [&](const auto &path) {
             const auto pin = file_pin(path, 512 * 1024);

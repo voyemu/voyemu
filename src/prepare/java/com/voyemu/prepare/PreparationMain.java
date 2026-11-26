@@ -399,7 +399,7 @@ public final class PreparationMain {
         Path originals =
                 absolute(Json.str(request, "root"))
                         .resolve(".local/profiles")
-                        .resolve(profile.recipeId())
+                        .resolve(profile.id())
                         .resolve("originals");
         Map<String, Object> declared = Json.obj(profile.data(), "original");
 
@@ -436,7 +436,7 @@ public final class PreparationMain {
         Path apk =
                 absolute(Json.str(request, "root"))
                         .resolve(".local/profiles")
-                        .resolve(profile.recipeId())
+                        .resolve(profile.id())
                         .resolve("originals/Navi.apk");
 
         Failure.require(
@@ -474,7 +474,7 @@ public final class PreparationMain {
             String id = entry.getKey();
             Path source =
                     Storage.confined(
-                            root.resolve("profiles").resolve(profile.recipeId()),
+                            root.resolve("profiles").resolve(profile.id()),
                             (String) entry.getValue());
             Map<String, Object> definition =
                     Json.object(Json.parse(Files.readString(source.resolve("component.json"))));
@@ -606,7 +606,7 @@ public final class PreparationMain {
                     3);
         }
 
-        if (profile.data().containsKey("variant") || !target.isEmpty()) {
+        if (!target.isEmpty()) {
             String effective = Json.str(request, "resolved_profile");
             byte[] bytes = effective.getBytes(StandardCharsets.UTF_8);
             Failure.require(
@@ -844,7 +844,7 @@ public final class PreparationMain {
                         name,
                         FilesSupport.hash(
                                 Storage.confined(
-                                        root.resolve("profiles/" + profile.recipeId() + "/patches"),
+                                        root.resolve("profiles/" + profile.id() + "/patches"),
                                         name)));
             }
         }
@@ -988,7 +988,7 @@ public final class PreparationMain {
                             Json.parse(
                                     Files.readString(
                                             Storage.confined(
-                                                    root.resolve("profiles/" + profile.recipeId()),
+                                                    root.resolve("profiles/" + profile.id()),
                                                     value + "/component.json"))));
 
             if (component.containsKey("externalSources")) {

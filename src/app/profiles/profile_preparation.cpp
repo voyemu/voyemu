@@ -267,7 +267,7 @@ std::vector<std::string> native_profile_android_inputs(const std::filesystem::pa
     for (auto it = profile.at("components").begin(); it != profile.at("components").end(); ++it) {
         const auto relative_name = it.value().get<std::string>();
         relative(relative_name);
-        const auto file = profile_recipe_directory(root, name) / relative_name / "component.json";
+        const auto file = authoring_directory(root, name) / relative_name / "component.json";
         hash(file, 512 * 1024);
         const auto component = read_private_json(file, 512 * 1024);
 
@@ -314,7 +314,7 @@ std::vector<std::string> native_profile_android_inputs(const std::filesystem::pa
 Json profile_patch_metadata(const std::filesystem::path &root, std::string_view name) {
     const auto definition = profile_definition(root, name);
     Json result = Json::object();
-    const auto directory = profile_recipe_directory(root, name) / "patches";
+    const auto directory = authoring_directory(root, name) / "patches";
 
     for (const auto &node : definition.at("patches")) {
         for (const auto &item : node.at("steps")) {
@@ -368,9 +368,8 @@ ProfilePreparationArtifacts prepare_profile_artifacts(const std::filesystem::pat
                                                       const std::filesystem::path &requested_jdk,
                                                       std::string_view target) {
     const auto profile = profile_definition(root, name, target);
-    const auto jdk = profile_preparation_jdk(root, requested_jdk, profile.contains("variant"),
-                                             embedded_toolchain_manifest().at("javaHelper"),
-                                             !target.empty());
+    const auto jdk = profile_preparation_jdk(
+            root, requested_jdk, embedded_toolchain_manifest().at("javaHelper"), !target.empty());
     const auto profile_pin = sha256_bytes(authoring_profile_bytes(root, name, target));
     const auto logical = native_profile_android_inputs(root, name);
 
@@ -576,7 +575,7 @@ ProfilePreparationArtifacts prepare_profile_artifacts(const std::filesystem::pat
         const auto relative_name = it.value().get<std::string>();
         relative(relative_name);
         relative(it.key());
-        const auto component_source = profile_recipe_directory(root, name) / relative_name;
+        const auto component_source = authoring_directory(root, name) / relative_name;
         const auto definition = read_private_json(component_source / "component.json");
 
         if (definition.value("type", std::string{}) != "native") {

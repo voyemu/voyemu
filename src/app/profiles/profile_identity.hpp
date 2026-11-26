@@ -114,13 +114,6 @@ inline std::string runtime_profile_reference(const Json &definition,
         return {};
     }
 
-    if (definition.contains("variant")) {
-        const auto &variant = definition.at("variant");
-        const auto reference = variant.value("recipeProfile", std::string{});
-
-        return valid_profile_name(reference) && reference != id ? reference : std::string{};
-    }
-
     if (!definition.contains("capture") || !definition.at("capture").is_object()) {
         return id;
     }

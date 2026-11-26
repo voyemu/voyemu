@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
         if (argc == 5 && std::string_view(argv[1]) == "--recipe-pin") {
             const auto root = std::filesystem::canonical(argv[2]);
             const std::string profile = argv[3], component = argv[4];
-            const auto source = profile_recipe_directory(root, profile) /
+            const auto source = authoring_directory(root, profile) /
                                 authoring_profile(root, profile)
                                         .at("components")
                                         .at(component)
@@ -126,9 +126,7 @@ int main(int argc, char **argv) {
             }
 
             const auto definition = read_private_json(source / "component.json");
-            const auto key = native_component_pin(
-                    profile_recipe_directory(root, profile).filename().string(), component,
-                    definition);
+            const auto key = native_component_pin(profile, component, definition);
             const auto origin = native_component_origin(
                     embedded_toolchain_manifest().at("androidNativeComponents"), key, definition);
             check(receipt.at("sha256") == origin.at("sha256"),
@@ -147,7 +145,7 @@ int main(int argc, char **argv) {
             const auto components = authoring_profile(root, profile).at("components");
 
             for (auto it = components.begin(); it != components.end(); ++it) {
-                const auto definition = read_private_json(profile_recipe_directory(root, profile) /
+                const auto definition = read_private_json(authoring_directory(root, profile) /
                                                           it.value().get<std::string>() /
                                                           "component.json");
 

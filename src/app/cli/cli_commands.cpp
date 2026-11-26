@@ -117,11 +117,11 @@ int deps_command(const Arguments &args, const Emit &emit) {
     // While the QNX engine of this host can be neither downloaded nor taken from the cache, deps
     // reports it unavailable and machines run without the cluster.
     const auto profile_file = args.root / "profiles" / args.profile / "profile.json";
-    const bool multimedia_variant =
+    const bool multimedia_only =
             !args.profile.empty() && std::filesystem::exists(profile_file) &&
             profile_multimedia_only(authoring_profile(args.root, args.profile, target));
 
-    if (!multimedia_variant) {
+    if (!multimedia_only) {
         try {
             result["qnx_host"] = step("qnx_host", [&] {
                 return voyemu::install_qnx_host(args.root, args.offline, preparation_margin);
@@ -135,7 +135,7 @@ int deps_command(const Arguments &args, const Emit &emit) {
         }
     }
 
-    if (multimedia_variant || (!target.empty() && std::filesystem::exists(profile_file)) ||
+    if ((!target.empty() && std::filesystem::exists(profile_file)) ||
         (!args.profile.empty() &&
          voyemu::portable_runtime_available(args.root, args.profile,
                                             voyemu::machine_identity(args.profile, {})))) {
@@ -146,16 +146,15 @@ int deps_command(const Arguments &args, const Emit &emit) {
     }
 
     const auto jdk = voyemu::profile_preparation_jdk(
-            args.root, args.jdk, multimedia_variant,
-            voyemu::embedded_toolchain_manifest().at("javaHelper"), !target.empty());
+            args.root, args.jdk, voyemu::embedded_toolchain_manifest().at("javaHelper"),
+            !target.empty());
     // The Java runtime of preparation; while its asset is neither published nor cached and no
     // recipe JDK links it, deps reports it unavailable.
     try {
         result["java_runtime"] =
                 step("java_runtime", [&] {
                     return voyemu::java_preparation_java(
-                            args.root,
-                            multimedia_variant || !target.empty() ? jdk : std::filesystem::path{},
+                            args.root, target.empty() ? std::filesystem::path{} : jdk,
                             voyemu::embedded_toolchain_manifest().at("javaRuntime"), args.offline,
                             preparation_margin);
                 }).string();

@@ -27,7 +27,7 @@ ProfileBinaryPatch plan_profile_binary_patch(
                     (!music && builds.size() == 2 && builds.contains("qgime-handwrite") &&
                      builds.contains("qgime-pinyin")),
             "exact native producers required");
-    const auto directory = profile_recipe_directory(root, profile);
+    const auto directory = authoring_directory(root, profile);
     const std::string step = music ? "music-arm64-libs.json" : "qgime-arm64-natives.json";
     std::map<std::filesystem::path, std::pair<Json, std::string>> tracked;
     std::map<std::filesystem::path, Json> source_trees;

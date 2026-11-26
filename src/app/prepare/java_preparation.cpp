@@ -247,7 +247,7 @@ void response(const std::filesystem::path &root, const JavaPreparationRequest &r
                 const auto &declared = profile.at("files").at(artifact.key().substr(6));
                 const auto name = declared.at("file").get<std::string>();
                 relative(name);
-                need(file == profile_recipe_directory(root, request.profile) / "files" / name,
+                need(file == authoring_directory(root, request.profile) / "files" / name,
                      "artifact outside declared profile files");
 
                 if (declared.contains("sha256")) {
@@ -425,11 +425,11 @@ static Json request_document(const std::filesystem::path &root,
         result["android_base"] = profile.at("android");
     }
 
-    if (profile.contains("variant") || profile.contains("target")) {
+    if (profile.contains("target")) {
         result["resolved_profile"] = authoring_profile_bytes(root, request.profile, request.target);
         need(sha256_bytes(result.at("resolved_profile").get_ref<const std::string &>()) ==
                      request.profile_sha256,
-             "vehicle variant changed before Java preparation");
+             "build target changed before Java preparation");
     }
 
     if (request.operation == JavaPreparationOperation::plan) {
@@ -545,7 +545,7 @@ static Json request_document(const std::filesystem::path &root,
     for (auto it = profile.at("components").begin(); it != profile.at("components").end(); ++it) {
         const auto relative_name = it.value().get<std::string>();
         relative(relative_name);
-        const auto source = profile_recipe_directory(root, request.profile) / relative_name;
+        const auto source = authoring_directory(root, request.profile) / relative_name;
         const auto definition = read_private_json(source / "component.json");
 
         if (definition.value("type", std::string{}) != "native") {
@@ -567,9 +567,7 @@ static Json request_document(const std::filesystem::path &root,
              "owned native component receipt required");
         pinned(item.receipt, item.receipt_sha256);
         const auto proof = read_private_json(item.receipt, 1 << 20);
-        const auto key = native_component_pin(
-                profile_recipe_directory(root, request.profile).filename().string(), id,
-                definition);
+        const auto key = native_component_pin(request.profile, id, definition);
         const auto origin = native_component_origin(manifest.at("androidNativeComponents"), key,
                                                     definition);
         const auto abi = native_component_abi(definition,

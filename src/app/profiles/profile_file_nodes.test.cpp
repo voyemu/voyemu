@@ -123,50 +123,6 @@ int main(int argc, char **argv) {
         ensure_private_directory(system);
         ensure_private_directory(vendor);
         {
-            const std::string id = "test-vehicle-x86_64", recipe = "test-vehicle",
-                              base = "test-android";
-            const auto sources = root / "profiles";
-            ensure_private_directory(sources / id);
-            ensure_private_directory(sources / recipe);
-            ensure_private_directory(sources / "common/android-bases");
-            write_private_json(
-                    sources / recipe / "profile.json",
-                    {{"schema", 1},
-                     {"id", recipe},
-                     {"platform", "passion"},
-                     {"board", "8155"},
-                     {"original", Json::object()},
-                     {"verify", Json::object()},
-                     {"patches", Json::object()},
-                     {"android", {{"package", "system-images;android-30;default;arm64-v8a"}}},
-                     {"emulator", Json::object()}});
-            write_private_json(sources / id / "profile.json",
-                               {{"schema", 1},
-                                {"id", id},
-                                {"title", "Test vehicle"},
-                                {"status", "incomplete"},
-                                {"variant", {{"recipeProfile", recipe}, {"androidBase", base}}},
-                                {"emulator", {{"acceleration", "kvm"}, {"gpuMode", "host"}}}});
-            write_private_json(
-                    sources / "common/android-bases" / (base + ".json"),
-                    {{"package", "system-images;android-30;default;x86_64"},
-                     {"url",
-                      "https://dl.google.com/android/repository/sys-img/android/x86_64-30_r11.zip"},
-                     {"sha256", std::string(64, 'a')},
-                     {"revision", "10"},
-                     {"clean_base", Json::object()},
-                     {"features", Json::object()}});
-            bool rejected = false;
-            try {
-                plan_profile_file_nodes(root, id, system, vendor);
-            } catch (const std::exception &error) {
-                rejected = std::string(error.what()).find("API30 native file graph") !=
-                           std::string::npos;
-            }
-
-            check(rejected, "variant omitted the OEM file graph check after resolving the x86 SDK");
-        }
-        {
             const auto &catalog = embedded_profile_catalog();
             const auto targeted =
                     std::find_if(catalog.begin(), catalog.end(), [](const auto &entry) {

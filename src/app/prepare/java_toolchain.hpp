@@ -38,10 +38,11 @@ std::filesystem::path install_java_helper(
 // JDK of the developer tools; without either it stops with JAVA_HELPER_ASSET_MISSING.
 std::filesystem::path java_helper_recipe_jdk(const std::filesystem::path &root,
                                              const std::filesystem::path &jdk);
-// A vehicle variant needs a helper that understands the source recipe and its independent SDK.
+// A selected build target needs a helper that declares profileTargetSchema; otherwise a source
+// checkout builds the helper with its developer JDK.
 std::filesystem::path profile_preparation_jdk(const std::filesystem::path &root,
-                                              const std::filesystem::path &requested, bool variant,
-                                              const Json &helper_pin, bool target = false);
+                                              const std::filesystem::path &requested,
+                                              const Json &helper_pin, bool target);
 // The java that runs the helper: that of the JDK25+ jdk when given, otherwise that of the Java
 // runtime of this host which install_java_runtime installs from runtime (javaRuntime pins).
 std::filesystem::path java_preparation_java(const std::filesystem::path &root,

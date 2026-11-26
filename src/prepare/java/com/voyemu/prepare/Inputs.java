@@ -29,10 +29,6 @@ final class Inputs {
     }
 
     static String originalsProfile(ProfileRegistry.Profile profile, Storage storage) {
-        if (!profile.recipeId().equals(profile.id())) {
-            return profile.recipeId();
-        }
-
         return Files.isDirectory(storage.originals(profile.id()))
                 ? profile.id()
                 : profile.referenceProfile();
@@ -123,7 +119,7 @@ final class Inputs {
         Map<String, Object> definitions = definitions(profile);
         requireAcquisitionSources(definitions, previous, args, tools, imported);
         Map<String, Object> overrides = receiptPins(profile, storage);
-        Path parent = storage.data().resolve("profiles/" + profile.recipeId());
+        Path parent = storage.data().resolve("profiles/" + profile.id());
         Storage.directory(parent);
         Path stage = parent.resolve(".fetch-" + UUID.randomUUID());
         Storage.directory(stage);
@@ -160,7 +156,7 @@ final class Inputs {
                             Json.write(pins).getBytes(java.nio.charset.StandardCharsets.UTF_8));
             Path receiptCandidate = stage.resolve("receipt.json");
             writeReceipt(receiptCandidate, profile, inputRevision, pins, imported);
-            Path root = storage.originals(profile.recipeId());
+            Path root = storage.originals(profile.id());
             Path receiptTarget = parent.resolve("receipt.json");
             Path backup = stage.resolve("previous-originals");
             Path receiptBackup = stage.resolve("previous-receipt.json");
@@ -299,7 +295,7 @@ final class Inputs {
         Map<String, Object> receipt = new LinkedHashMap<>();
 
         receipt.put("schema", 1);
-        receipt.put("profile", profile.recipeId());
+        receipt.put("profile", profile.id());
         receipt.put("recipeRevision", profile.revision());
         receipt.put("revision", inputRevision);
         receipt.put("pins", pins);

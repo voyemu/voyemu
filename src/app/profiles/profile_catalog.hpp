@@ -3,11 +3,11 @@
 #include "profile_identity.hpp"
 #include <functional>
 namespace voyemu {
-// Exact profile bytes for preparation and publication. A host variant resolves its OEM recipe
-// and pinned Android base before any consumer computes the profile digest.
+// Exact profile bytes for preparation and publication. A selected build target resolves its
+// pinned Android base before any consumer computes the profile digest.
 std::string authoring_profile_bytes(const std::filesystem::path &root, std::string_view profile,
                                     std::string_view target = {});
-// Planners bind every physical input (variant, recipe and SDK descriptor) to their existing guards.
+// Planners bind every physical input (recipe and SDK descriptor) to their existing guards.
 std::string
 authoring_profile_bytes(const std::filesystem::path &root, std::string_view profile,
                         const std::function<std::string(const std::filesystem::path &)> &read,
@@ -18,8 +18,9 @@ std::string select_profile_target(const Json &definition, std::string_view reque
                                   std::string_view host, bool kvm_available);
 Json profile_target_identity(const Json &definition);
 bool profile_multimedia_only(const Json &definition);
-std::filesystem::path profile_recipe_directory(const std::filesystem::path &root,
-                                               std::string_view profile);
+// The authoring directory profiles/PROFILE of a valid profile id.
+std::filesystem::path authoring_directory(const std::filesystem::path &root,
+                                          std::string_view profile);
 // Every bundled definition declares a valid platform, board and title.
 const Json &embedded_profile_catalog();
 const Json &embedded_profile(std::string_view id);

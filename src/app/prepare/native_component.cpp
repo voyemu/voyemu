@@ -639,7 +639,7 @@ std::pair<std::filesystem::path, Json> profile_native_component(const std::files
         throw VoyemuError("COMPONENT_PATH", "profile-relative component required");
     }
 
-    const auto source = profile_recipe_directory(root, profile) / path;
+    const auto source = authoring_directory(root, profile) / path;
     const auto definition = read_private_json(source / "component.json");
 
     if (definition.value("type", std::string{}) != "native") {
@@ -767,8 +767,7 @@ install_native_component(const std::filesystem::path &root, const std::string &p
     }
 
     const auto [source, definition] = profile_native_component(root, profile, component);
-    const auto key = native_component_pin(
-            profile_recipe_directory(root, profile).filename().string(), component, definition);
+    const auto key = native_component_pin(profile, component, definition);
 
     if (!std::regex_match(key, keys)) {
         throw VoyemuError("COMPONENT_PIN", "invalid native component pin");

@@ -285,7 +285,7 @@ Json upgrade_pinned_json(const std::filesystem::path &root, const Json &descript
 } // namespace profile_build_detail
 
 std::string current_profile_revision(const std::filesystem::path &root, std::string_view profile) {
-    const auto directory = profile_recipe_directory(root, profile);
+    const auto directory = authoring_directory(root, profile);
     Json files = Json::object();
     std::uint64_t total = 0;
 
@@ -312,7 +312,7 @@ static void validate_qinggan09_equipment_artifact(const std::filesystem::path &r
                                                   std::string_view profile,
                                                   const std::filesystem::path &work,
                                                   const Json &artifact) {
-    const auto directory = profile_recipe_directory(root, profile);
+    const auto directory = authoring_directory(root, profile);
     const auto definition = authoring_profile(root, profile);
 
     need(record_declares(definition, ProfilePlatform::qinggan09, ProfileBoard::sa8155) &&
@@ -586,7 +586,7 @@ Json validate_profile_artifact_resume(const std::filesystem::path &root, std::st
                 validate_qinggan09_equipment_artifact(root, profile, work, artifact);
             } else {
                 const std::filesystem::path source = artifact.at("file").get<std::string>();
-                inside(profile_recipe_directory(root, profile) / "files", source);
+                inside(authoring_directory(root, profile) / "files", source);
                 need(hash(source) == artifact.at("sha256").get<std::string>() &&
                              std::filesystem::file_size(source) ==
                                      artifact.at("bytes").get<std::uint64_t>(),

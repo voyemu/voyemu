@@ -1,7 +1,6 @@
 #pragma once
 #include "error.hpp"
 #include "os/fs.hpp"
-#include "profile_catalog.hpp"
 #include "profile_identity.hpp"
 #include <stdexcept>
 namespace voyemu {
@@ -17,15 +16,6 @@ inline std::filesystem::path profile_originals_directory(const std::filesystem::
 
     if (!root.is_absolute() || !valid_profile_name(profile)) {
         throw VoyemuError("PROFILE_ORIGINALS_ARGUMENT", "absolute root and valid profile required");
-    }
-
-    const auto recipe = profile_recipe_directory(root, profile);
-
-    if (recipe.filename() != profile) {
-        // Variant resolution fixes its OEM original declarations to those of the reference.
-        (void)authoring_profile(root, profile);
-
-        return profile_originals_directory(root, recipe.filename().string());
     }
 
     const auto own = root / ".local/profiles" / std::string(profile) / "originals";

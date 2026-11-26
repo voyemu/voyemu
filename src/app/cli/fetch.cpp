@@ -1836,7 +1836,7 @@ Json fetch_native_inputs(const std::filesystem::path &root, std::string_view pro
         throw VoyemuError("FETCH_ROOT", "canonical root and safe profile required");
     }
 
-    const auto recipe = profile_recipe_directory(root, profile);
+    const auto recipe = authoring_directory(root, profile);
     const auto input_profile = recipe.filename().string();
     Json imported;
 

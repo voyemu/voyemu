@@ -25,7 +25,7 @@ ProfileBinaryApkNode plan_profile_binary_apk_node(const std::filesystem::path &r
     require(valid_profile_name(profile), "safe profile name required");
     require(name == "VehicleSetting" || name == "VehicleAir", "unsupported binary profile node");
     inputs.ordinary(build);
-    const auto profile_dir = profile_recipe_directory(root, profile),
+    const auto profile_dir = authoring_directory(root, profile),
                patch_file = profile_dir / "patches/add-qg-runtime.json",
                receipt_file = build / "receipt.json";
     inputs.file(patch_file, 128 * 1024);

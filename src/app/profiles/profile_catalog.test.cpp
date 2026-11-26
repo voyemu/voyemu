@@ -580,7 +580,7 @@ int main(int argc, char **argv) {
                               profile_target_identity(arm).at("abi") == "arm64-v8a" &&
                               profile_target_identity(x86).at("abi") == "x86_64" &&
                               !profile_multimedia_only(arm) && profile_multimedia_only(x86) &&
-                              profile_recipe_directory(root, id) == root / "profiles" / id,
+                              authoring_directory(root, id) == root / "profiles" / id,
                       "resolved bases and scopes differ while the recipe stays shared");
 
                 for (const auto *field :
@@ -600,47 +600,6 @@ int main(int argc, char **argv) {
                                   fonts.at(role).contains(weight) &&
                                   fonts.at(role).at(weight).contains("original"),
                           "vehicle profile declares the car fonts of the window");
-                }
-            }
-
-            if (original.contains("variant")) {
-                const auto source = runtime_profile_reference(original, id);
-                const auto &oem = embedded_profile(source).at("definition");
-                check(profile_recipe_directory(root, id) == root / "profiles" / source &&
-                              original.at("original") == oem.at("original") &&
-                              original.at("identity") == oem.at("identity") &&
-                              original.at("patches") == oem.at("patches") &&
-                              original.at("install") == oem.at("install") &&
-                              original.at("verify") == oem.at("verify") &&
-                              original.at("configure") == oem.at("configure") &&
-                              original.at("components") == oem.at("components") &&
-                              original.at("android").at("features") ==
-                                      oem.at("android").at("features") &&
-                              original.at("emulator").at("acceleration") == "kvm" &&
-                              original.at("emulator").at("gpuMode") == "host" &&
-                              original.at("android").at("package") ==
-                                      "system-images;android-30;default;x86_64",
-                      "vehicle variant must keep the OEM source, guest configuration and verification");
-
-                if (profile_platform(original) == ProfilePlatform::passion) {
-                    check(original.at("emulator").at("audioOutput") == true &&
-                                  original.at("features") == oem.at("features"),
-                          "vehicle variant must retain OEM features and enable host audio");
-                    check(declared_patch_plan(original) == declared_patch_plan(oem),
-                          "Passion Android x86_64 variant must keep the exact OEM patch plan");
-
-                    auto incompatible = original;
-                    incompatible.erase("variant");
-                    bool denied = false;
-                    try {
-                        (void)declared_patch_plan(incompatible);
-                    } catch (const VoyemuError &error) {
-                        denied = std::string_view(error.what()) ==
-                                 "PREPARATION_SCHEMA: unsupported patch type";
-                    }
-
-                    check(denied,
-                          "Passion navigation JAR requires a declared vehicle x86_64 variant");
                 }
             }
 

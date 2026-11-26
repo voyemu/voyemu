@@ -94,7 +94,7 @@ ProfileFileNodes plan_profile_codec_file_node(const std::filesystem::path &root,
             Json::parse(authoring_profile_bytes(root, profile, [&](const auto &path) {
                 return read(path, 512 * 1024);
             }));
-    const auto directory = profile_recipe_directory(root, profile);
+    const auto directory = authoring_directory(root, profile);
     need(profile_scope(definition) == qinggan09_scope && definition.at("schema") == 1 &&
                  native_base_api(definition.at("android")) == 28,
          "registered clean A9 codec base required");
@@ -194,7 +194,7 @@ ProfileFileNodes plan_profile_file_nodes(const std::filesystem::path &root,
                 return read(path, 512 * 1024);
             },
             build_target));
-    const auto directory = profile_recipe_directory(root, profile);
+    const auto directory = authoring_directory(root, profile);
     const bool rooted_observer = qinggan11_ui_observer_policy_requested(definition);
 
     if (native_base_api(definition.at("android")) == 30) {
