@@ -119,6 +119,10 @@ Json save_android_candidate_ui_observation(const std::filesystem::path &director
     return normalized;
 }
 
+int android_candidate_cold_command_timeout(const std::vector<std::string> &command) {
+    return !command.empty() && command.front() == "sha256sum" ? 120000 : 10000;
+}
+
 std::vector<std::string> android_home_role_holders(std::string_view dump) {
     std::vector<std::string> holders;
     bool home = false;

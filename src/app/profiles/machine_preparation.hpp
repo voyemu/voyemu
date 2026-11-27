@@ -114,6 +114,10 @@ void android_candidate_first_oem_boot(
 std::vector<std::string> android_candidate_art_verify_packages(const Json &profile);
 // Classify typed guest argv only; host ADB routing and shell strings are never parsed.
 std::string android_candidate_command_log(const std::vector<std::string> &arguments);
+// The time limit of one guest command of the cold checks: hashing an installed file reads all
+// of it from the cold disk, which for an APK of hundreds of MiB on a loaded host takes longer
+// than the 10 s of other commands.
+int android_candidate_cold_command_timeout(const std::vector<std::string> &command);
 // API 30 RoleManager owns HOME: every default role grant, which any package change starts, sets
 // the preferred HOME activity to the role holder. PackageManager and RoleManager persist the
 // preferred activity and the holder separately, so a reboot can keep one store without the other.

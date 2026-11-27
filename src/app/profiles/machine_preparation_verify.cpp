@@ -472,7 +472,10 @@ void verify_cold(Candidate &c, const Json &profile, const std::vector<Installed>
 
         if (!item.package.empty() && item.target.starts_with("/system/priv-app/")) {
             equal("privileged-base:" + item.target,
-                  c.shell({"sha256sum", item.target}).substr(0, 64), item.sha256);
+                  c.shell({"sha256sum", item.target},
+                          android_candidate_cold_command_timeout({"sha256sum", item.target}))
+                          .substr(0, 64),
+                  item.sha256);
             const auto parent = std::filesystem::path(item.target).parent_path().generic_string();
             equal("privileged-owner:" + item.target, c.shell({"stat", "-c", "%u:%g", item.target}),
                   "0:0");
@@ -509,10 +512,10 @@ void verify_cold(Candidate &c, const Json &profile, const std::vector<Installed>
             }
         }
 
-        verify_cold_installed_file(profile, item, target, checks, cold_boot_id,
-                                   [&](const auto &command) {
-                                       return c.shell(command);
-                                   });
+        verify_cold_installed_file(
+                profile, item, target, checks, cold_boot_id, [&](const auto &command) {
+                    return c.shell(command, android_candidate_cold_command_timeout(command));
+                });
     }
 
     const auto config = profile.value("configure", Json::object());

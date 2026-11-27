@@ -2752,6 +2752,11 @@ static void home_settings_fixture() {
 int main(int argc, char **argv) {
     try {
         verify_failed_cold_check_retains_observation();
+        // A cold hash reads the whole installed file; other cold commands keep their bound.
+        check(android_candidate_cold_command_timeout({"sha256sum", "/system/app/A/A.apk"}) ==
+                      120000 &&
+              android_candidate_cold_command_timeout({"stat", "-c", "%a", "/system"}) == 10000 &&
+              android_candidate_cold_command_timeout({}) == 10000);
 
         if (argc == 2 && std::string_view(argv[1]) == "--cold-check-failure") {
             return 0;

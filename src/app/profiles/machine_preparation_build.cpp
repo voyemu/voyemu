@@ -1460,7 +1460,8 @@ Json build_android_candidate(const std::filesystem::path &root,
         verify_cold_policy_files(
                 profile, installed, checks,
                 [&](const auto &command) {
-                    return candidate.shell(command);
+                    return candidate.shell(command,
+                                           android_candidate_cold_command_timeout(command));
                 },
                 [&] {
                     candidate.root_adbd();
