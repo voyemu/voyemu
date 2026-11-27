@@ -25,20 +25,19 @@ The target uses API 30 `default` x86_64 r11 and prepares it like the `arm` targe
 
 [Build the launcher from source](../dev/build.md) with the pinned Linux build tools, including JDK 25. Run the commands from the checkout root in a hardware-accelerated graphical session with access to `/dev/kvm` and the GPU render device. The SDK Emulator needs the Qt/X11 runtime libraries, including `libxkbfile.so.1`, `libSM.so.6` and `libICE.so.6`.
 
-Use the local path to `OIB_8155_H53Y3632802AW.zip`. Both `deps` and `build` use the developer JDK for the [Java preparation helper](../dev/ci.md#the-java-helper-workflow) until an archive with support for build targets is pinned. On an x86_64 host `x86` is the default target, and the machine goes to `machines/PROFILE`.
+Use the local path to `OIB_8155_H53Y3632802AW.zip`. On an x86_64 host `x86` is the default target, and the machine goes to `machines/PROFILE`.
 
 Building the HAB component from source requires Android NDK r29 (`29.0.14206865`). Separately from `deps`, download the complete Linux NDK archive using the URL and SHA-256 in `sdk.archives.linux.ndk` in [`src/app/toolchain.json`](../../src/app/toolchain.json). Verify the download, extract it outside the managed SDK directory and set `NDK_HOME` to the absolute canonical path of the directory containing `source.properties`. Voyemu checks the external NDK inventory against its pin.
 
 ```sh
 profile=passion-11-russian-20260403-2.1.4.80
 firmware=/path/to/OIB_8155_H53Y3632802AW.zip
-jdk="$PWD/.local/toolchains/jdk-25.0.5+8"
 machine=machines/${profile}
 export NDK_HOME=/path/to/android-ndk-r29
 
-./voyemu deps "$profile" --jdk "$jdk"
+./voyemu deps "$profile"
 ./voyemu fetch "$profile" --source="$firmware"
-./voyemu build "$profile" --jdk "$jdk"
+./voyemu build "$profile"
 ./voyemu check "$machine"
 ./voyemu start "$machine"
 ./voyemu status "$machine"
@@ -57,7 +56,7 @@ Import the pinned firmware archive `OIB_8155_H53Y3632802AW.zip` from a local pat
 The `arm` target follows the [common preparation steps](../how/preparation.md). On Apple Silicon it is the default target, and the machine goes to `machines/passion-11-russian-20260403-2.1.4.80`. On a host with an x86_64 processor `--target=arm` selects it; its guest then runs in software translation in `machines/passion-11-russian-20260403-2.1.4.80-arm`. `--cluster=off` prepares only multimedia.
 
 ```sh
-./voyemu build passion-11-russian-20260403-2.1.4.80 --cluster=off --jdk "$jdk"
+./voyemu build passion-11-russian-20260403-2.1.4.80 --cluster=off
 ```
 
 ## Notes

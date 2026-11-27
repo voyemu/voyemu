@@ -25,20 +25,19 @@ Android выводит звук через аудиовыход хоста, см
 
 Собрать [лаунчер из исходников](../dev/build.ru.md) закреплённым набором инструментов Linux с JDK 25. Выполнить команды из корня рабочей копии в графическом сеансе с аппаратным ускорением и доступом к `/dev/kvm` и устройству рендеринга GPU. Эмулятору из SDK нужны библиотеки Qt и X11, в том числе `libxkbfile.so.1`, `libSM.so.6` и `libICE.so.6`.
 
-Команды получают локальный путь к `OIB_8155_H53Y3632802AW.zip`. `deps` и `build` используют JDK разработчика для [помощника Java](../dev/ci.ru.md#рабочий-процесс-java-helper), пока не закреплён архив с поддержкой целей сборки. На хосте x86_64 цель `x86` выбирается по умолчанию, а машина создаётся в `machines/PROFILE`.
+Команды получают локальный путь к `OIB_8155_H53Y3632802AW.zip`. На хосте x86_64 цель `x86` выбирается по умолчанию, а машина создаётся в `machines/PROFILE`.
 
 Для сборки компонента HAB из исходников нужен Android NDK r29 (`29.0.14206865`). Отдельно от `deps` скачайте полный архив NDK для Linux по URL и SHA-256 из `sdk.archives.linux.ndk` в [`src/app/toolchain.json`](../../src/app/toolchain.json). Сверьте SHA-256, распакуйте архив вне каталога SDK, который устанавливает Voyemu, и задайте в `NDK_HOME` абсолютный канонический путь к каталогу с `source.properties`. Voyemu сверяет содержимое внешнего NDK с пином.
 
 ```sh
 profile=passion-11-russian-20260403-2.1.4.80
 firmware=/path/to/OIB_8155_H53Y3632802AW.zip
-jdk="$PWD/.local/toolchains/jdk-25.0.5+8"
 machine=machines/${profile}
 export NDK_HOME=/path/to/android-ndk-r29
 
-./voyemu deps "$profile" --jdk "$jdk"
+./voyemu deps "$profile"
 ./voyemu fetch "$profile" --source="$firmware"
-./voyemu build "$profile" --jdk "$jdk"
+./voyemu build "$profile"
 ./voyemu check "$machine"
 ./voyemu start "$machine"
 ./voyemu status "$machine"
@@ -57,7 +56,7 @@ export NDK_HOME=/path/to/android-ndk-r29
 Цель `arm` готовится по [общей инструкции](../how/preparation.ru.md). На Apple Silicon она выбирается по умолчанию, а машина создаётся в `machines/passion-11-russian-20260403-2.1.4.80`. На хосте с процессором x86_64 её выбирает `--target=arm`; гость тогда работает в программной трансляции в `machines/passion-11-russian-20260403-2.1.4.80-arm`. `--cluster=off` готовит только мультимедиа.
 
 ```sh
-./voyemu build passion-11-russian-20260403-2.1.4.80 --cluster=off --jdk "$jdk"
+./voyemu build passion-11-russian-20260403-2.1.4.80 --cluster=off
 ```
 
 ## Замечания
