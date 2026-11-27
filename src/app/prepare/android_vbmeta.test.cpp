@@ -105,15 +105,18 @@ int main(int argc, char **argv) {
             std::ofstream out(file, std::ios::binary);
             out.write(remounted.bytes.data(), static_cast<std::streamsize>(remounted.bytes.size()));
         }
-        const auto reader = raw_disk_reader(file);
-        check(android_vbmeta_chain(reader, remounted.partitions).digest == disabled.digest,
-              "raw disk chain differs");
-        check(rejected(
-                      [&] {
-                          (void)reader(remounted.bytes.size() - 8, 16);
-                      },
-                      "read outside the disk image"),
-              "read past the disk accepted");
+        {
+            // The reader keeps the image open, and Windows refuses to remove an open file.
+            const auto reader = raw_disk_reader(file);
+            check(android_vbmeta_chain(reader, remounted.partitions).digest == disabled.digest,
+                  "raw disk chain differs");
+            check(rejected(
+                          [&] {
+                              (void)reader(remounted.bytes.size() - 8, 16);
+                          },
+                          "read outside the disk image"),
+                  "read past the disk accepted");
+        }
         std::filesystem::remove(file);
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
