@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <title>Passion right steering-wheel controls</title>
+  <desc>
+    Virtual zones follow the controls in the Voyah Passion H53 manual. The runtime raster is a centered 720 by 616 crop of a 720 by 720 render.
+  </desc>
+  <defs>
+    <linearGradient id="face-tone" x2="0" y1="170" y2="846" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f9fbff"/>
+      <stop offset="1" stop-color="#e6edf5"/>
+    </linearGradient>
+  </defs>
+  <path id="panel" fill="url(#face-tone)" d="M100 170C270 173 473 178 621 187C692 192 740 229 787 279C834 329 880 375 880 427C880 485 860 548 822 575C784 602 721 638 649 665C488 727 278 792 100 846Z"/>
+  <g fill="none" stroke="#36404d" stroke-linecap="round" stroke-linejoin="round" stroke-width="7">
+    <path id="glyph-volume_up" d="M-25 13 0-11l25 24" transform="translate(552 286)"/>
+    <path id="glyph-next" d="M-21-19 14 0l-35 19ZM27-19v38" transform="translate(697 435)"/>
+    <path id="glyph-volume_down" d="M-25-13 0 11l25-24" transform="translate(552 584)"/>
+    <path id="glyph-previous" d="M21-19-14 0l35 19ZM-27-19v38" transform="translate(407 435)"/>
+    <path id="glyph-ok" d="M-26 0a26 26 0 1 0 52 0 26 26 0 1 0-52 0Z" transform="translate(552 435)"/>
+    <path id="glyph-voice" d="M35-42c-12 8-22 16-28 22q-4 6 4 10 4 4 2 8l10 10H13q-10 0-10 8v6q0 10 10 12 12 4 20 8m-58-26q-10-16 0-32m10 28q-6-12 0-24m10 18q-4-6 0-12" transform="translate(209 301)"/>
+    <path id="glyph-phone" d="M-7 52 C-10 56 -14 55 -19 50 C-33 34 -32 8 -14 -13 C3 -34 29 -40 47 -28 C53 -25 54 -21 51 -17 L43 -8 Q39 -3 36 -7 L32 -13 Q29 -17 24 -14 C8 -9 -7 8 -9 26 Q-11 30 -6 33 L0 35 Q5 38 0 43 Z" transform="translate(199 615)"/>
+  </g>
+  <g fill="none">
+    <path id="face-volume_up" d="M405 277A216 216 0 0 1 699 277L611 365A92 92 0 0 0 493 365Z"/>
+    <path id="face-next" d="M710 288A216 216 0 0 1 710 582L622 494A92 92 0 0 0 622 376Z"/>
+    <path id="face-volume_down" d="M699 593A216 216 0 0 1 405 593L493 505A92 92 0 0 0 611 505Z"/>
+    <path id="face-previous" d="M394 582A216 216 0 0 1 394 288L482 376A92 92 0 0 0 482 494Z"/>
+    <path id="face-ok" d="M476 435a76 76 0 1 1 152 0 76 76 0 1 1 -152 0Z"/>
+    <path id="face-voice" d="M129 301a82 82 0 1 1 164 0 82 82 0 1 1 -164 0Z"/>
+    <path id="face-phone" d="M129 625a82 82 0 1 1 164 0 82 82 0 1 1 -164 0Z"/>
+  </g>
+</svg>

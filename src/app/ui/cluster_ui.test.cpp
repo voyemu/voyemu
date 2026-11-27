@@ -583,6 +583,54 @@ void parsing() {
     check(rejected, "replay cannot silently override live frame");
 }
 
+void passion_panel_symmetry(const std::filesystem::path &assets) {
+    const auto left = window::decode_png(assets / "wheel-left.png"),
+               right = window::decode_png(assets / "wheel-right.png");
+
+    check(left.width == right.width && left.height == right.height,
+          "Passion wheel panels use the same raster dimensions");
+
+    std::size_t visible = 0, mismatched = 0;
+
+    // Compare solid alpha so the glyphs and gradient do not affect the silhouette.
+    for (int y = 0; y < left.height; ++y) {
+        const auto row = static_cast<std::size_t>(y) * left.width;
+
+        for (int x = 0; x < left.width; ++x) {
+            const bool a = left.rgba[4 * (row + x) + 3] >= 128,
+                       b = right.rgba[4 * (row + right.width - x - 1) + 3] >= 128;
+            visible += a || b;
+            mismatched += a != b;
+        }
+    }
+
+    check(visible > 0 && mismatched * 1000 <= visible,
+          "Passion wheel silhouettes are mirrored within raster edge tolerance");
+
+    for (const auto &[file, dark] :
+         {std::pair{"wheel-left-light.png", &left}, std::pair{"wheel-right-light.png", &right}}) {
+        const auto light = window::decode_png(assets / file);
+        check(light.width == dark->width && light.height == dark->height,
+              "Passion light artwork fits the same display box");
+
+        bool matching_alpha = true;
+        std::size_t solid = 0, brighter = 0;
+
+        for (std::size_t pixel = 0; pixel < light.rgba.size(); pixel += 4) {
+            matching_alpha &= light.rgba[pixel + 3] == dark->rgba[pixel + 3];
+
+            if (dark->rgba[pixel + 3] >= 128) {
+                ++solid;
+                brighter += light.rgba[pixel] >= dark->rgba[pixel] + 96;
+            }
+        }
+
+        check(matching_alpha, "Passion light artwork shares the dark silhouette");
+        check(solid > 0 && brighter * 100 >= solid * 95,
+              "Passion light theme uses a light panel surface");
+    }
+}
+
 void profile_wheel_layout(const std::filesystem::path &assets) {
     const char *qinggan11_env = std::getenv("VOYEMU_QINGGAN11_FIXTURE");
     const auto other = qinggan11_env ? std::filesystem::path(qinggan11_env)
@@ -677,6 +725,7 @@ void profile_wheel_layout(const std::filesystem::path &assets) {
 
     reject(changed);
     const auto passion_assets = assets.parent_path() / "passion-2024";
+    passion_panel_symmetry(passion_assets);
     const auto passion = read_wheel_geometry(passion_assets / "wheel-hotspots.json");
     const std::set<std::string> passion_ids = {"cruise_up",
                                                "custom",

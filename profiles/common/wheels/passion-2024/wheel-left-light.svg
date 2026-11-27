@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <title>Passion left steering-wheel controls</title>
+  <desc>
+    Virtual zones follow the controls in the Voyah Passion H53 manual. The runtime raster is a centered 720 by 616 crop of a 720 by 720 render.
+  </desc>
+  <defs>
+    <linearGradient id="face-tone" x2="0" y1="170" y2="846" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f9fbff"/>
+      <stop offset="1" stop-color="#e6edf5"/>
+    </linearGradient>
+  </defs>
+  <path id="panel" fill="url(#face-tone)" d="M900 170C730 173 527 178 379 187C308 192 260 229 213 279C166 329 120 375 120 427C120 485 140 548 178 575C216 602 279 638 351 665C512 727 722 792 900 846Z"/>
+  <g fill="none" stroke="#36404d" stroke-linecap="round" stroke-linejoin="round" stroke-width="7">
+    <path id="glyph-cruise_up" d="M-44 19c12 16 35 15 47-3 12-18 0-39-16-43-11-3-22 0-31 7v-9m72 13h24m-12-12v24" transform="translate(444 286)"/>
+    <path id="glyph-distance_increase" d="M-16-16h32m-38 16h44m-50 16h56" transform="translate(596 435)"/>
+    <path id="glyph-cruise_down" d="M-25 0h50" transform="translate(448 583)"/>
+    <path id="glyph-distance_decrease" d="M-20-9h40m-47 18h54" transform="translate(300 435)"/>
+    <path id="glyph-acc" d="M-31 29V8l6-13q3-9 13-9h24q10 0 13 9l6 13v21zm0-21h62m-51 10h4m32 0h4m-71 7q0-26 15-42m87 42q0-26-15-42m-54-11q18-9 36 0" transform="translate(448 437)"/>
+    <path id="glyph-custom" d="M0-38 12-13l27 4-20 19 5 27L0 24l-24 13 5-27-20-19 27-4Z" transform="translate(789 301)"/>
+    <path id="glyph-menu" d="M27-11h8q6 0 6 6v23q0 6-6 6h-49q-6 0-6-6V8M-31-24h52q6 0 6 6V2q0 6-6 6h-52q-6 0-6-6v-20q0-6 6-6ZM-26-14h43m-43 12h43" transform="translate(787 625)"/>
+  </g>
+  <g fill="none">
+    <path id="face-cruise_up" d="M301 277A216 216 0 0 1 595 277L507 365A92 92 0 0 0 389 365Z"/>
+    <path id="face-distance_increase" d="M606 288A216 216 0 0 1 606 582L518 494A92 92 0 0 0 518 376Z"/>
+    <path id="face-cruise_down" d="M595 593A216 216 0 0 1 301 593L389 505A92 92 0 0 0 507 505Z"/>
+    <path id="face-distance_decrease" d="M290 582A216 216 0 0 1 290 288L378 376A92 92 0 0 0 378 494Z"/>
+    <path id="face-acc" d="M372 435a76 76 0 1 1 152 0 76 76 0 1 1 -152 0Z"/>
+    <path id="face-custom" d="M707 301a82 82 0 1 1 164 0 82 82 0 1 1 -164 0Z"/>
+    <path id="face-menu" d="M707 625a82 82 0 1 1 164 0 82 82 0 1 1 -164 0Z"/>
+  </g>
+</svg>
