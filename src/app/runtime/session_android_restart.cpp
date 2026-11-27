@@ -595,9 +595,13 @@ Json Session::reboot_android(const std::string &mode) {
                 throw VoyemuError("ANDROID_REBOOT_UNKNOWN", "SDK reboot may have been submitted");
             }
 
+            // A warm reboot retains the SDK process. Advance its authenticated launch
+            // record before the completion probe checks the new generation.
+            advance_android_launch_generation(directory_, session_id_, old_pid, old_generation);
+            ++android_generation_;
+            deliveries_["android"]["generation"] = android_generation_;
             reset_android_transaction();
             android_identity_mismatch_ = false;
-            ++android_generation_;
             android_identity_ = false;
             android_clock_observed_ = false;
             android_clock_correction_attempted_ = false;

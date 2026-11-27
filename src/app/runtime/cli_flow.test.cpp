@@ -1271,7 +1271,7 @@ int main(int argc, char **argv) try {
                     // reports the mounted volume; unplugging removes the device and the volume.
                     const auto operation = [&](const char *op,
                                                const Json &arguments = Json::object()) {
-                        const auto path = root / ".local/build/canonical-api-usb.json";
+                        const auto path = root / ".local/build/canonical-api-operation.json";
                         Json request{{"schema", 1},
                                      {"request_id", random_token()},
                                      {"op", op},
@@ -1328,6 +1328,75 @@ int main(int argc, char **argv) try {
                     }
 
                     require(image, "the machine has no generated USB drive image");
+
+                    if (!os::host_windows) {
+                        const auto initial = json({"status"});
+                        const auto pid = initial.at("android_pid");
+                        auto generation = initial.at("deliveries")
+                                                  .at("android")
+                                                  .at("generation")
+                                                  .get<std::uint64_t>();
+                        std::string external_boot;
+
+                        for (const auto *token : {"11111111111111111111111111111111",
+                                                  "22222222222222222222222222222222"}) {
+                            auto identity = read_private_json(root / "identity.json");
+                            identity["boot_token"] = token;
+                            write_private_json(root / "identity.json", identity);
+                            ++generation;
+                            const auto deadline = std::chrono::steady_clock::now() +
+                                                  std::chrono::seconds(10);
+                            bool observed = false;
+
+                            do {
+                                const auto status = json({"status"});
+                                const auto &android = status.at("deliveries").at("android");
+
+                                if (android.at("generation") == generation) {
+                                    const auto boot = android.at("external_reboot")
+                                                              .at("boot_id")
+                                                              .get<std::string>();
+                                    require(status.at("android_pid") == pid &&
+                                                    android_boot_id_valid(boot) &&
+                                                    boot != external_boot,
+                                            "external guest reboot did not preserve the SDK process");
+                                    external_boot = boot;
+                                    observed = true;
+                                    break;
+                                }
+
+                                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                            } while (std::chrono::steady_clock::now() < deadline);
+
+                            require(observed, "external guest reboot was not observed");
+                        }
+
+                        const auto request_id = random_token();
+                        const auto reboot =
+                                operation("multimedia.reboot",
+                                          {{"request_id", request_id}, {"mode", "warm"}});
+                        require(reboot.at("status") == "completed" &&
+                                        reboot.at("scope") == "guest_boot_changed" &&
+                                        reboot.at("android_pid_before") == pid &&
+                                        reboot.at("android_pid") == pid &&
+                                        reboot.at("boot_id_before") == external_boot &&
+                                        android_boot_id_valid(
+                                                reboot.at("boot_id").get<std::string>()) &&
+                                        reboot.at("boot_id") != external_boot &&
+                                        reboot.at("generation_before") == generation &&
+                                        reboot.at("generation") == generation + 1,
+                                "warm reboot did not complete on a new boot of the same SDK: " +
+                                        reboot.dump());
+                        const auto receipt = operation("operation.get",
+                                                       {{"target", {{"request_id", request_id}}}});
+                        require(receipt.at("status") == "terminal" &&
+                                        receipt.at("outcome") == "completed" &&
+                                        receipt.at("response").at("result") == reboot,
+                                "warm reboot terminal record differs: " + receipt.dump());
+                        require(json({"status"}).at("deliveries").at("android").at("generation") ==
+                                        generation + 1,
+                                "runtime generation differs from the completed warm reboot");
+                    }
                 }
 
                 const auto observed = json({"status"});
