@@ -24,6 +24,8 @@ The `features` field of `profile.json` turns on optional functions of the firmwa
 
 The `emulator` field of `profile.json` sets the Android emulator of the machine: `port`, `memory`, `gpuMode` and optionally `cores`. `candidatePort` fixes the port of the emulator that preparation boots to build the machine; without it, preparation takes a free port.
 
+`gpuMode` selects the renderer of the emulator: `host` renders on the host GPU, `auto` and `auto-no-window` let the emulator choose, `swiftshader_indirect` renders in software on the host, and `guest` renders in software inside the guest. The machine records the renderer it was prepared with, and `start` runs it with the same one; `build` and `start` reject any other value. `guest` needs no GPU on the host, so a host without one can prepare and start the machine, but the screens draw and animate much slower than with the host GPU.
+
 ## Build targets
 
 A build target prepares one firmware for one guest ABI. The OEM inputs and recipes stay those of the profile; the `targets` field of `profile.json` names each target and declares what differs:

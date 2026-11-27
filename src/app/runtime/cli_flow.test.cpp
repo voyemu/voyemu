@@ -154,7 +154,8 @@ int main(int argc, char **argv) try {
     const std::string gpu_mode = argc == 4 && std::string(argv[3]) == "--gpu-host" ? "host"
                                  : argc == 4 && std::string(argv[3]) == "--gpu-auto-no-window"
                                          ? "auto-no-window"
-                                         : "";
+                                 : argc == 4 && std::string(argv[3]) == "--gpu-guest" ? "guest"
+                                                                                      : "";
     const bool clock_flow = argc == 4 && std::string(argv[3]) == "--clock-readback";
     const bool control_latency = argc == 4 && std::string(argv[3]) == "--control-latency";
     const bool state_flow = argc == 4 && std::string(argv[3]) == "--state-latency";

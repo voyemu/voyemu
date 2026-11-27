@@ -1,4 +1,5 @@
 #include "profile_catalog.hpp"
+#include "android_engine.hpp"
 #include "base_image.hpp"
 #include "check.hpp"
 #include "cli_messages.hpp"
@@ -104,6 +105,8 @@ Json resolve_target(Json definition, std::string_view name,
         need(only_fields(emulator, {"acceleration", "gpuMode", "memory"}) &&
                      emulator.value("acceleration", Json("required")) == "required" &&
                      emulator.value("gpuMode", Json("host")).is_string() &&
+                     android_renderer_supported(
+                             emulator.value("gpuMode", Json("host")).get<std::string>()) &&
                      memory.is_number_integer() && memory >= 512 && memory <= 16384,
              "invalid build target emulator settings");
         definition["emulator"].update(emulator);

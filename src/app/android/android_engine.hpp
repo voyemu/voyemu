@@ -51,6 +51,22 @@ inline void require_android_acceleration(const ProcessSpec &emulator) {
     }
 }
 
+// The renderers that preparation and start pass to the pinned emulator as -gpu: host GPU modes,
+// SwiftShader on the host, and guest, which renders in software inside the guest for a host
+// without a usable GPU.
+inline bool android_renderer_supported(std::string_view mode) {
+    return mode == "auto" || mode == "auto-no-window" || mode == "host" ||
+           mode == "swiftshader_indirect" || mode == "guest";
+}
+
+inline const std::string &checked_android_renderer(const std::string &mode) {
+    if (!android_renderer_supported(mode)) {
+        throw VoyemuError("ANDROID_GPU", "unsupported prepared renderer");
+    }
+
+    return mode;
+}
+
 inline bool android_sdk_headless_backend(const std::vector<std::string> &arguments) {
     const auto options_end = std::find(arguments.begin(), arguments.end(), "-qemu");
 

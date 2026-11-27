@@ -559,6 +559,29 @@ static void verify_profile_target_hosts() {
                   resolved("native").at("android") == definition.at("android"),
           "targets keep their own API, Android base and emulator settings");
 
+    // A target emulator takes the renderers that start accepts, guest included, and no other.
+    for (const auto &[mode, accepted] : std::array<std::pair<const char *, bool>, 3>{
+                 {{"guest", true}, {"swiftshader_indirect", true}, {"software", false}}}) {
+        auto variant = definition;
+        variant["targets"]["intel-api30"]["emulator"]["gpuMode"] = mode;
+        auto changed = files;
+        changed[root / "profiles/synthetic-targets/profile.json"] = variant;
+        bool resolved_mode = false;
+        try {
+            resolved_mode = Json::parse(authoring_profile_bytes(
+                                                root, "synthetic-targets",
+                                                [&](const std::filesystem::path &file) {
+                                                    return changed.at(file).dump();
+                                                },
+                                                "intel-api30"))
+                                    .at("emulator")
+                                    .at("gpuMode") == mode;
+        } catch (const std::exception &) { /* Ignored: a rejected renderer resolves no mode. */
+        }
+
+        check(resolved_mode == accepted, "a target renderer is accepted only when start runs it");
+    }
+
     // The default follows the host ABI on every host and ignores host acceleration, which the
     // session checks when the guest starts; a host of another ABI selects any target explicitly.
     const Json pair = {

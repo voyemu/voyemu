@@ -339,6 +339,29 @@ int main() {
                 throw std::runtime_error("a visible window or QEMU argument selected an engine");
             }
         }
+
+        // Preparation and start pass the same renderers; guest renders in software in the guest.
+        for (const std::string mode :
+             {"auto", "auto-no-window", "host", "swiftshader_indirect", "guest"}) {
+            if (checked_android_renderer(mode) != mode) {
+                throw std::runtime_error("supported renderer rejected: " + mode);
+            }
+        }
+
+        for (const std::string mode : {"", "Guest", "swiftshader", "angle_indirect", "off"}) {
+            bool rejected = false;
+            try {
+                (void)checked_android_renderer(mode);
+            } catch (const std::exception &error) {
+                rejected = std::string(error.what()) ==
+                           "ANDROID_GPU: unsupported prepared renderer";
+            }
+
+            if (!rejected || android_renderer_supported(mode)) {
+                throw std::runtime_error("unknown renderer accepted: " + mode);
+            }
+        }
+
         std::cout
                 << "Windows ARM64 backend, multi-threaded TCG and SDK DLL environment passed; Mac unchanged\n";
 

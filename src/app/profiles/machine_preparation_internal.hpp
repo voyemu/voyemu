@@ -436,8 +436,10 @@ struct Candidate {
         cmd.arguments.insert(cmd.arguments.end(), control.begin(), control.end());
 
         if (profile.at("emulator").contains("gpuMode")) {
-            cmd.arguments.insert(cmd.arguments.end(),
-                                 {"-gpu", profile.at("emulator").at("gpuMode").get<std::string>()});
+            cmd.arguments.insert(
+                    cmd.arguments.end(),
+                    {"-gpu", checked_android_renderer(
+                                     profile.at("emulator").at("gpuMode").get<std::string>())});
         }
 
         const auto features = profile.at("android").value("features", Json::object());

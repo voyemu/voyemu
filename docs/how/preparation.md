@@ -12,7 +12,7 @@ Run the launcher from the installation root; on Windows the launcher is `voyemu.
 
 A file or directory path in an option, such as `--source=update.zip`, may be relative to the current directory or start with `~/` for the home directory; symbolic links in it are followed. Voyemu turns such a path into an absolute one before use.
 
-A guest whose ABI is that of the host processor runs with hardware acceleration. For a [build target](profiles-machines.md#build-targets) that requires it, the pinned emulator confirms the acceleration before `build` and `start` boot the guest; without it they stop with `ANDROID_ACCELERATION`. For host GPU rendering, use a hardware-accelerated graphical session with access to the GPU render device.
+A guest whose ABI is that of the host processor runs with hardware acceleration. For a [build target](profiles-machines.md#build-targets) that requires it, the pinned emulator confirms the acceleration before `build` and `start` boot the guest; without it they stop with `ANDROID_ACCELERATION`. For host GPU rendering, use a hardware-accelerated graphical session with access to the GPU render device; a host without a GPU prepares and starts a machine whose renderer is `guest`, see [the renderer](profiles-machines.md#profile).
 
 ## deps
 

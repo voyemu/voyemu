@@ -392,14 +392,7 @@ void Session::attach_android(const Json &input, bool explicit_cold_boot) {
     }
 
     if (specification.contains("gpuMode") || !gpu_mode.empty()) {
-        auto mode = gpu_mode;
-
-        if (mode != "auto" && mode != "auto-no-window" && mode != "host" &&
-            mode != "swiftshader_indirect") {
-            throw VoyemuError("ANDROID_GPU", "unsupported prepared renderer");
-        }
-
-        spec.arguments.insert(spec.arguments.end(), {"-gpu", mode});
+        spec.arguments.insert(spec.arguments.end(), {"-gpu", checked_android_renderer(gpu_mode)});
     }
 
     if (passion_camera_identity(specification)) {
