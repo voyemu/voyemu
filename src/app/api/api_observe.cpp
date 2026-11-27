@@ -349,6 +349,36 @@ Json Api::dispatch_observe(const std::string &op, const Json &request, Clock::ti
 
         const auto source = request.value("source", std::string("supervisor"));
 
+        if (source == "incidents") {
+            const auto system = text(request, "system");
+
+            if (system == "cluster") {
+                throw VoyemuError("TEST_UNSUPPORTED", "cluster incident logging is unavailable");
+            }
+
+            if (system != "multimedia") {
+                throw VoyemuError("TEST_ARGUMENT", "unknown incident log system");
+            }
+
+            const auto timeout = number(request, "timeout_ms", 1000, 0, 60000);
+            auto logs = transports_.android
+                                ->logs(request,
+                                       {{"source", source},
+                                        {"system", system},
+                                        {"timeout_ms", timeout},
+                                        {"limit", number(request, "limit", 16, 1, 32)},
+                                        {"cursor", request.value("cursor", Json())}},
+                                       static_cast<int>(timeout + 500))
+                                .at("logs");
+
+            if (!logs.is_object() || logs.value("source", std::string{}) != source ||
+                logs.value("system", std::string{}) != system) {
+                throw VoyemuError("TEST_LOGS_PROTOCOL", "incident source or system mismatch");
+            }
+
+            return logs;
+        }
+
         if (source == "anr" || source == "native") {
             if (request.contains("details") || request.contains("cursor")) {
                 throw VoyemuError("TEST_ARGUMENT",
@@ -393,7 +423,7 @@ Json Api::dispatch_observe(const std::string &op, const Json &request, Clock::ti
 
         if (source != "supervisor") {
             throw VoyemuError("TEST_ARGUMENT",
-                              "log source must be supervisor, android, anr or native");
+                              "log source must be supervisor, android, anr, native or incidents");
         }
 
         const auto record = session_record(request, false);

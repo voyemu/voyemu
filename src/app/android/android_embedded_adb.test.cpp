@@ -254,6 +254,28 @@ int main(int argc, char **argv) try {
 
     const auto shell = client.run({"shell", "printf", "'%s'", "ready"}, 1000, 128);
     require(shell.output == "okerr" && shell.exit_code == 37, "shell v2 streams and exit code");
+    const auto lease = client.lease();
+    auto separated = client.open_shell({"shell", "printf", "'%s'", "ready"}, 1000, 128, lease,
+                                       true);
+    require(client.current(lease), "capture belongs to the active device lease");
+    separated.close_stdin();
+    std::string stdout_bytes, stderr_bytes;
+
+    for (const auto end = std::chrono::steady_clock::now() + 1s;;
+         std::this_thread::sleep_for(1ms)) {
+        require(std::chrono::steady_clock::now() < end, "lease-bound shell did not finish");
+        const auto update = separated.poll();
+        stdout_bytes += update.output;
+        stderr_bytes += update.error_output;
+
+        if (update.terminal) {
+            require(update.terminal->exit_code == 37 && stdout_bytes == "ok" &&
+                            stderr_bytes == "err",
+                    "binary shell keeps stderr separate");
+            break;
+        }
+    }
+
     const auto exec = client.run({"exec-out", "cat", "a b"}, 1000, 128);
     require(!exec.exit_code && exec.output == binary, "binary exec-out");
     require(client.run({"shell", "slow"}, 20, 128).timed_out, "bounded shell deadline");

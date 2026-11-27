@@ -542,7 +542,10 @@ void ControlServer::serve(std::atomic<bool> &stop) {
                                         std::chrono::milliseconds(cluster_ui_timeout(input));
                             }
 
-                            if (input.value("op", std::string{}) == "test_watch_read") {
+                            if (input.value("op", std::string{}) == "test_watch_read" ||
+                                (input.value("op", std::string{}) == "test_output_logs" &&
+                                 input.value("source", std::string{}) == "incidents" &&
+                                 input.value("timeout_ms", 1000) > 0)) {
                                 auto count = watch_readers.load();
 
                                 while (count < 4 &&

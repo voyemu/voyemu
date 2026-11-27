@@ -261,6 +261,57 @@ void system_phone_logs(const std::filesystem::path &base) {
     assert(off.at("code") == "PHONE_PROVIDER_UNAVAILABLE" && off.at("outcome") == "not_started");
 }
 
+void incident_logs(const std::filesystem::path &base) {
+    struct IncidentGuest final : api::FakeGuestAndroid {
+        bool wrong_system = false;
+
+        Json logs(const Json &request, const Json &query, int timeout) override {
+            assert(timeout >= 500);
+            assert(query.at("system") == "multimedia" && query.at("timeout_ms") == 0 &&
+                   query.at("limit") == 2);
+
+            return {{"ok", true},
+                    {"session_id", request.at("session").at("id")},
+                    {"logs",
+                     {{"source", "incidents"},
+                      {"system", wrong_system ? "cluster" : "multimedia"},
+                      {"status", "unavailable"},
+                      {"entries", Json::array()},
+                      {"cursor", query.at("cursor")}}}};
+        }
+    };
+    auto android = std::make_shared<IncidentGuest>();
+    Observed fixture(base, android);
+    auto read = fixture.owned.request("session.logs");
+
+    read["session"].erase("ownership_id");
+    read["source"] = "incidents";
+    read["timeout_ms"] = 0;
+    read["limit"] = 2;
+
+    assert(code(fixture.instance.call(read)) == "TEST_ARGUMENT");
+    read["system"] = "cluster";
+    assert(code(fixture.instance.call(read)) == "TEST_UNSUPPORTED");
+    read["system"] = "unrecognized";
+    assert(code(fixture.instance.call(read)) == "TEST_ARGUMENT");
+    read["system"] = "multimedia";
+    read["cursor"] = {{"session_id", read.at("session").at("id")},
+                      {"system", "multimedia"},
+                      {"stream_id", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+                      {"after_seq", "5"}};
+    const auto result = fixture.instance.call(read);
+    assert(result.at("ok") == true && result.at("result").at("cursor") == read.at("cursor") &&
+           result.at("result").at("status") == "unavailable");
+    android->wrong_system = true;
+    assert(code(fixture.instance.call(read)) == "TEST_LOGS_PROTOCOL");
+
+    read["subsystem"] = "multimedia";
+    assert(code(fixture.instance.call(read)) == "TEST_ARGUMENT");
+    read.erase("subsystem");
+    read["source"] = "android_incidents";
+    assert(code(fixture.instance.call(read)) == "TEST_ARGUMENT");
+}
+
 void usb_drive(const std::filesystem::path &base) {
     struct Unconfirmed final : api::FakeGuestAndroid {
         Json usb_drive(const Json &request, bool, int) override {
@@ -317,6 +368,7 @@ int main(int argc, char **argv) try {
     tree(base);
     frame(base);
     system_phone_logs(base);
+    incident_logs(base);
     usb_drive(base);
     std::cout << "Android multimedia API lifecycle and observations dispatch through "
                  "GuestAndroid\n";

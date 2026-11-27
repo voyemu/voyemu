@@ -278,6 +278,7 @@ The `session.start.providers` field registers up to four absolute manifest paths
 | `android` | Android log metadata; with `details: true` also the diagnostic text of fixed ART and native tags, up to 2048 bytes per message, with credentials removed; `cursor` is unsupported (`TEST_UNSUPPORTED`) |
 | `anr` | The saved ANR summary (including `unknown`), an ASCII excerpt of up to 16 KiB with credentials removed, `excerpt_truncated`, `source_bytes` and `source_sha256`; `details` and `cursor` are forbidden |
 | `native` | The `crash` buffer, the list of files in `/data/tombstones` and `handler_diagnostics`; `details` and `cursor` are forbidden |
+| `incidents` | Session journal of Android incidents with a cursor and bounded waiting. Requires `system: "multimedia"` |
 
 Logs do not prove that events were absent all the time.
 
@@ -288,6 +289,16 @@ Logs do not prove that events were absent all the time.
 The `handler_diagnostics` field holds the first 128 matching lines of the `main`, `system` and `crash` buffers with the fixed tags `libc`, `DEBUG`, `crash_dump32`, `crash_dump64`, `tombstoned`, `libdebuggerd_client` and `debuggerd` at all levels, and `IPCThreadState` and `ProcessState` at warning level or above; other tags are disabled. The prefix is limited to 32 KiB plus one byte that reveals truncation. The same size and time limits, credential redaction and session ownership and boot checks apply. `collection_epoch` binds the collection to the session, the SDK emulator PID and the boot; retained lines are not proven to belong to that boot. Arbitrary tags and commands are rejected. This is not a continuous log and does not prove that there were no crashes.
 
 The supervisor collects the `anr` and `native` snapshots over a direct connection to the `adbd` of its session. Before and after the collection the client checks the selected launch configuration, the SDK descriptor and the supervisor boot proof. The supervisor checks the emulator PID, port ownership, the AVD name, the Linux boot ID and the guest nonce. A guest restored from a checkpoint can keep its previous nonce when these checks pass. `timeout_ms` bounds the collection of the whole snapshot.
+
+`session.logs` with `source: "incidents"` requires `system: "multimedia"`. `system: "cluster"` returns `TEST_UNSUPPORTED`. Missing or unknown systems return `TEST_ARGUMENT`. The supervisor observes the owned Android while it runs. The journal contains Java fatal exceptions, native fatal signals and debuggerd stack frames, and Activity Manager crash and ANR reports. It retains normalized identifiers and bounded stack frames. A later correlated observation adds an `enriched` record with the same incident ID and a higher revision. Repeated crashes have separate IDs. An unresolved `am_crash` is an Activity Manager report whose relation to another crash is unknown.
+
+```json
+{"schema":1,"request_id":"read-incidents-1","op":"session.logs","profile":"PROFILE","session":{"id":"SESSION"},"source":"incidents","system":"multimedia","limit":16,"timeout_ms":1000}
+```
+
+`limit` is 1–32 records, default 16. `timeout_ms` is 0–60000, default 1000. Zero returns immediately. Read with `result.cursor` to continue after the returned page. An omitted cursor starts at the beginning of the retained journal. `head_cursor` gives the current end if the client wants only later publications. Every cursor carries the session, system and journal ID (`stream_id`). Retrying the same cursor can replay the same records. Save it after processing the page. The supervisor retains up to 512 records and bounds the journal to 2 MiB. `has_more` means more records are already available. The journal is discarded when the supervisor exits.
+
+Each incident carries the Android `boot_id`, SDK launch generation, affected process, reported guest wall clock, reason and stack excerpt. The sequence and cursor order records by publication. The boot field outside the entries describes the current verified guest. Each log reader starts after its initial tail record and reports when its baseline has been armed. This excludes retained log data on Quick Boot. Guest reboot, lost coverage and journal eviction are explicit gap records. If a cursor carries an earlier journal ID in the same session, `cursor_reset` signals the change and the returned cursor starts at the available window. `sources` reports availability independently for text and Activity Manager events. A source can lose entries before observation, while disconnected, or inside Android. Empty results cannot establish that no crash occurred.
 
 ## Subscriptions
 

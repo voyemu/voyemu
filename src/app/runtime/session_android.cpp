@@ -744,6 +744,7 @@ void Session::publish_android_to_local_adb(std::chrono::steady_clock::time_point
 }
 
 void Session::stop_owned_android_adb() {
+    retire_android_incidents("transport_detached");
     android_adb_published_ = false;
     android_adb_registration_warned_ = false;
     next_local_adb_publish_ = {};

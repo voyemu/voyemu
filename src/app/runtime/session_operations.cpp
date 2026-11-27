@@ -967,6 +967,29 @@ Json Session::handle(const Json &operation) {
 
             lock.lock();
             reply["session_id"] = session_id_;
+        } else if (op == "test_output_logs" &&
+                   operation.value("source", std::string{}) == "incidents") {
+            if (!operation.contains("session_id") ||
+                operation.value("system", std::string{}) != "multimedia") {
+                throw VoyemuError("TEST_ARGUMENT",
+                                  "explicit incident session and multimedia system required");
+            }
+
+            const auto journal = android_incident_journal();
+            const auto cursor = operation.value("cursor", Json());
+            const auto limit = operation.value("limit", 16);
+            const auto timeout = operation.value("timeout_ms", 1000);
+            lock.unlock();
+            try {
+                reply = {{"ok", true},
+                         {"session_id", session_id_},
+                         {"logs", journal->read(cursor, static_cast<std::size_t>(limit), timeout)}};
+            } catch (...) {
+                lock.lock();
+                throw;
+            }
+
+            lock.lock();
         } else if (op == "test_output_logs") {
             if (!operation.contains("session_id") || android_spec_.empty() || !android_powered_) {
                 throw VoyemuError("TEST_LOGS_UNAVAILABLE", "owned Android guest required");

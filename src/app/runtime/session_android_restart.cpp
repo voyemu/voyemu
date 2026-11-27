@@ -589,6 +589,7 @@ Json Session::reboot_android(const std::string &mode) {
             }
 
             // The command is fixed, never a shell fragment or caller-supplied executable.
+            retire_android_incidents("boot_unverified");
             const auto submitted = adb({"reboot"}, 5000);
 
             if (submitted.exit_code || submitted.timed_out) {

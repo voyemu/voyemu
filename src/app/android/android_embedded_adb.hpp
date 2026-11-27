@@ -28,6 +28,7 @@ public:
             std::string output;
             std::optional<ProcessResult> terminal;
             int status = 0;
+            std::string error_output;
         };
 
         Stream() = default;
@@ -63,18 +64,21 @@ public:
     bool shutdown() noexcept;
     // Capture while the caller holds its Session ownership fence.
     Lease lease() const;
+    bool current(const Lease &lease) const;
     ProcessResult run(const std::vector<std::string> &arguments, int timeout_ms,
                       std::size_t output_limit, std::stop_token cancellation = {},
                       std::optional<Lease> expected = {});
     // A zero timeout retains this shell until the stream's owner cancels it.
     Stream open_shell(const std::vector<std::string> &arguments, int timeout_ms,
-                      std::size_t pending_limit = 128 * 1024);
+                      std::size_t pending_limit = 128 * 1024,
+                      const std::optional<Lease> &expected = {}, bool separate_stderr = false);
     Stream open_root(int timeout_ms, std::size_t pending_limit);
     Stream open_observer(std::string_view observer_id, int timeout_ms);
 
 private:
     Stream open(std::uint32_t service, std::string_view command, int timeout_ms,
-                std::size_t pending_limit, const std::optional<Lease> &expected = {});
+                std::size_t pending_limit, const std::optional<Lease> &expected = {},
+                bool separate_stderr = false);
     std::shared_ptr<Impl> impl_;
 };
 } // namespace voyemu

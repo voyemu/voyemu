@@ -544,6 +544,19 @@ Json normalize_request(Json request, bool suite_case) {
         }
     }
 
+    if (op == "session.logs" && request.value("source", std::string{}) == "incidents") {
+        for (const auto &[key, value] : request.items()) {
+            (void)value;
+
+            if (key != "schema" && key != "request_id" && key != "op" && key != "profile" &&
+                key != "session" && key != "machine" && key != "source" && key != "system" &&
+                key != "timeout_ms" && key != "cursor" && key != "limit" &&
+                !(suite_case && key == "id")) {
+                throw VoyemuError("TEST_ARGUMENT", "unsupported incident log field");
+            }
+        }
+    }
+
     if (op == "session.ui") {
         for (const auto &[key, value] : request.items()) {
             (void)value;
@@ -1643,6 +1656,8 @@ Json Api::dispatch_catalog(const std::string &op, const Json &request, Clock::ti
                 {"windows_runtime_supported", os::platform_name == "Windows"},
                 {"mcp", false},
                 {"operations", operations()},
+                {"log_sources",
+                 Json::array({"supervisor", "android", "anr", "native", "incidents"})},
                 {"provider_registration",
                  "session.start.providers: up to four explicit pinned manifest files; read through session.observe sources"},
                 {"voice_semantics",

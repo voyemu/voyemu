@@ -561,6 +561,8 @@ void Session::tick() {
         advance_android(android_guest_possible, now);
     } // Disable cooperative unlock before cleanup bookkeeping.
 
+    poll_android_incidents();
+
     if (android_guest_possible) {
         publish_android_to_local_adb(now);
     }
@@ -603,6 +605,7 @@ void Session::stop() {
         }
 
         test_services_closed_ = true;
+        retire_android_incidents("session_closed", true);
 
         if (test_watch_) {
             test_watch_->close();

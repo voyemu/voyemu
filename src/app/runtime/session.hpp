@@ -3,6 +3,7 @@
 #include "android_adb.hpp"
 #include "android_embedded_adb.hpp"
 #include "android_identity_probe.hpp"
+#include "android_incidents.hpp"
 #include "android_port_lease.hpp"
 #include "body_ecu.hpp"
 #include "interguest_link.hpp"
@@ -441,6 +442,22 @@ private:
     std::unique_ptr<AndroidPortLease> android_port_lease_;
     ChildProcess android_, qnx_, ui_, frontend_;
     std::shared_ptr<AndroidEmbeddedAdb> android_adb_;
+    struct AndroidIncidentReader {
+        AndroidEmbeddedAdb::Stream stream;
+        std::optional<AndroidEmbeddedAdb::Lease> lease;
+        std::string prefix;
+        bool verified = false;
+        std::chrono::steady_clock::time_point next_open{}, opening_deadline{};
+    };
+    std::array<AndroidIncidentReader, 2> android_incident_readers_;
+    std::shared_ptr<voyemu::runtime::AndroidIncidents> android_incidents_;
+    std::string android_incident_boot_;
+    std::uint64_t android_incident_generation_ = 0;
+    std::int64_t android_incident_sdk_pid_ = 0;
+    std::chrono::steady_clock::time_point next_incident_poll_{};
+    std::shared_ptr<voyemu::runtime::AndroidIncidents> android_incident_journal();
+    void poll_android_incidents();
+    void retire_android_incidents(std::string_view reason, bool close = false);
     std::unique_ptr<AndroidSdkAdbSink> android_adb_sink_;
     unsigned android_adb_console_port_ = 0;
     bool android_adb_published_ = false;

@@ -350,7 +350,8 @@ struct AndroidEmbeddedAdb::Operation {
     std::uint32_t service = 0;
     int status = ADB_STATUS_OK;
     bool opened = false;
-    std::string output;
+    bool separate_stderr = false;
+    std::string output, error_output;
     std::string control_prefix;
     std::optional<ProcessResult> terminal;
 };
@@ -443,11 +444,15 @@ struct AndroidEmbeddedAdb::Impl {
         } else if (event.type == ADB_EVENT_OPENED) {
             operation->opened = true;
         } else if (event.type == ADB_EVENT_STDOUT || event.type == ADB_EVENT_STDERR) {
-            if (event.payload.size > operation->limit - operation->output.size()) {
+            if (event.payload.size >
+                operation->limit - operation->output.size() - operation->error_output.size()) {
                 stop_operation(*operation, ADB_STATUS_TRUNCATED);
             } else {
                 const auto data = view(event.payload);
-                operation->output.append(data);
+                auto &target = event.type == ADB_EVENT_STDERR && operation->separate_stderr
+                                       ? operation->error_output
+                                       : operation->output;
+                target.append(data);
 
                 if (operation->service == ADB_SERVICE_ROOT ||
                     operation->service == ADB_SERVICE_REBOOT) {
@@ -553,7 +558,7 @@ AndroidEmbeddedAdb::Stream &AndroidEmbeddedAdb::Stream::operator=(Stream &&other
 
 AndroidEmbeddedAdb::Stream::Poll AndroidEmbeddedAdb::Stream::poll() {
     if (!operation_) {
-        return {false, {}, failed(ADB_STATUS_INVALID)};
+        return {false, {}, failed(ADB_STATUS_INVALID), ADB_STATUS_INVALID, {}};
     }
 
     std::lock_guard lock(owner_->mutex);
@@ -563,7 +568,8 @@ AndroidEmbeddedAdb::Stream::Poll AndroidEmbeddedAdb::Stream::poll() {
         adb_host_grant_sync_output(owner_->host, operation_->id, output.size());
     }
 
-    return {operation_->opened, std::move(output), operation_->terminal, operation_->status};
+    return {operation_->opened, std::move(output), operation_->terminal, operation_->status,
+            std::exchange(operation_->error_output, {})};
 }
 
 std::size_t AndroidEmbeddedAdb::Stream::write(std::string_view data) {
@@ -748,9 +754,17 @@ AndroidEmbeddedAdb::Lease AndroidEmbeddedAdb::lease() const {
     return Lease(impl_, impl_->attachment, impl_->generation);
 }
 
+bool AndroidEmbeddedAdb::current(const Lease &expected) const {
+    std::lock_guard lock(impl_->mutex);
+
+    return impl_->attached && impl_->generation && expected.owner_.lock() == impl_ &&
+           expected.attachment_ == impl_->attachment && expected.generation_ == impl_->generation;
+}
+
 AndroidEmbeddedAdb::Stream AndroidEmbeddedAdb::open(std::uint32_t service, std::string_view command,
                                                     int timeout_ms, std::size_t pending_limit,
-                                                    const std::optional<Lease> &expected) {
+                                                    const std::optional<Lease> &expected,
+                                                    bool separate_stderr) {
     if (timeout_ms < 0 || timeout_ms > 3600000 || pending_limit > observer_pending ||
         (!timeout_ms && service != ADB_SERVICE_SHELL_V2_RAW)) {
         throw VoyemuError("ANDROID_ADB_SERVICE", "invalid stream bounds");
@@ -759,6 +773,7 @@ AndroidEmbeddedAdb::Stream AndroidEmbeddedAdb::open(std::uint32_t service, std::
     auto operation = std::make_shared<Operation>();
     operation->limit = pending_limit;
     operation->service = service;
+    operation->separate_stderr = separate_stderr;
     std::lock_guard lock(impl_->mutex);
     operation->generation = impl_->generation;
 
@@ -790,14 +805,15 @@ AndroidEmbeddedAdb::Stream AndroidEmbeddedAdb::open(std::uint32_t service, std::
 }
 
 AndroidEmbeddedAdb::Stream AndroidEmbeddedAdb::open_shell(const std::vector<std::string> &arguments,
-                                                          int timeout_ms,
-                                                          std::size_t pending_limit) {
+                                                          int timeout_ms, std::size_t pending_limit,
+                                                          const std::optional<Lease> &expected,
+                                                          bool separate_stderr) {
     if (arguments.empty() || arguments[0] != "shell") {
         throw VoyemuError("ANDROID_ADB_COMMAND", "shell required");
     }
 
-    return open(ADB_SERVICE_SHELL_V2_RAW, command_line(arguments, false), timeout_ms,
-                pending_limit);
+    return open(ADB_SERVICE_SHELL_V2_RAW, command_line(arguments, false), timeout_ms, pending_limit,
+                expected, separate_stderr);
 }
 
 AndroidEmbeddedAdb::Stream AndroidEmbeddedAdb::open_root(int timeout_ms,
