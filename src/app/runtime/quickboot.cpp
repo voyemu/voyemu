@@ -183,7 +183,8 @@ Json android_quickboot_key(const Json &specification) {
 
     // Timer/accelerator state is part of the SDK snapshot migration format on Windows.
     if (os::host_windows) {
-        key["backend_arguments"] = android_sdk_machine_arguments(true);
+        key["backend_arguments"] = android_sdk_machine_arguments(
+                true, false, specification.value("guest_arch", std::string("arm64-v8a")));
     }
 
     return key;

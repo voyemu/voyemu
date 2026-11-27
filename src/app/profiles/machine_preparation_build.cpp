@@ -941,11 +941,11 @@ Json build_android_candidate(const std::filesystem::path &root,
     }
 
     if (x86) {
-        tool(request, backend.parent_path() / "qemu-system-x86_64-headless");
+        tool(request, android_sdk_headless_engine(backend.parent_path()));
     }
 
     Candidate candidate(root, destination, request.sdk, adb,
-                        android_sdk_program(request.sdk, !exe.empty()), qemu_img, request.port,
+                        android_sdk_program(request.sdk, !exe.empty(), abi), qemu_img, request.port,
                         request.overall_timeout_ms, request.cancelled, request.capture_frames);
     std::uint64_t base_bytes_total = 0;
 

@@ -276,7 +276,7 @@ Json activate_portable_runtime(const std::filesystem::path &root, std::string_vi
     std::string headless_sha;
 
     if (abi == "x86_64") {
-        const auto headless = backend.parent_path() / "qemu-system-x86_64-headless";
+        const auto headless = android_sdk_headless_engine(backend.parent_path());
         headless_sha = tool_pin(root, host, headless);
         add_pin(pins, headless, headless_sha);
     }

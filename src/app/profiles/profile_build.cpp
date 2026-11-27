@@ -261,8 +261,7 @@ std::map<std::string, std::string> host_pins(const std::filesystem::path &sdk,
     }
 
     if (android_guest_abi(definition) == "x86_64") {
-        const auto headless = sdk / "emulator/qemu" / backend_host() /
-                              "qemu-system-x86_64-headless";
+        const auto headless = android_sdk_headless_engine(sdk / "emulator/qemu" / backend_host());
         pins[headless.string()] = hash(headless, 512ULL << 20);
     }
 

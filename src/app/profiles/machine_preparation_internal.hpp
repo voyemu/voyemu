@@ -431,7 +431,8 @@ struct Candidate {
         const bool accelerated = android_hardware_acceleration(android_guest_abi(profile));
         cmd.arguments.insert(cmd.arguments.end(), {"-accel", accelerated ? "on" : "off"});
 #ifdef _WIN32
-        const auto machine_arguments = android_sdk_machine_arguments(true);
+        const auto machine_arguments = android_sdk_machine_arguments(true, false,
+                                                                     android_guest_abi(profile));
         cmd.arguments.insert(cmd.arguments.end(), machine_arguments.begin(),
                              machine_arguments.end());
 #endif

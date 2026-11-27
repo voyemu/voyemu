@@ -486,8 +486,9 @@ void Session::attach_android(const Json &input, bool explicit_cold_boot) {
              {"reason", audio.reason},
              {"engine", android_sdk_headless_backend(spec.arguments) ? "headless" : "full"}});
     // Keep backend board arguments last, after every owned emulator option.
-    const auto machine_arguments = android_sdk_machine_arguments(os::host_windows,
-                                                                 diagnostic_native);
+    const auto machine_arguments = android_sdk_machine_arguments(
+            os::host_windows, diagnostic_native,
+            specification.value("guest_arch", std::string("arm64-v8a")));
     spec.arguments.insert(spec.arguments.end(), machine_arguments.begin(), machine_arguments.end());
     {
         // Every generation starts with an empty USB port; a stale socket of a lost SDK process

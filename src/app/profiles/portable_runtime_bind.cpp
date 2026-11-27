@@ -1270,11 +1270,11 @@ std::filesystem::path bind_machine_configuration(const std::filesystem::path &ro
             }
 
             require_stopped_profile();
-            require_file(android_sdk_program(host.sdk, !suffix.empty()));
+            require_file(android_sdk_program(host.sdk, !suffix.empty(), abi));
 
             if (abi == "x86_64") {
-                require_file(host.sdk / "emulator/qemu" / std::string(os::emulator_host) /
-                             "qemu-system-x86_64-headless");
+                require_file(android_sdk_headless_engine(host.sdk / "emulator/qemu" /
+                                                         std::string(os::emulator_host)));
             }
 
             for (const auto &[name, sha] : portable_clean_boot_pins(definition.at("android"))) {

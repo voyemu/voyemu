@@ -1363,7 +1363,9 @@ Json portable_android_launch(const std::filesystem::path &root,
     const auto runtime = native_machine_directory(root, profile_name, identity);
     Json android = {
             {"schema", 1},
-            {"executable", android_sdk_program(host.sdk, !suffix.empty()).string()},
+            {"executable",
+             android_sdk_program(host.sdk, !suffix.empty(), android_guest_abi(definition))
+                     .string()},
             {"adb_transport", "direct"},
             {"avd_name", avd},
             {"machine", machine.string()},

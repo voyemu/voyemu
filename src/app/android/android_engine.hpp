@@ -11,6 +11,18 @@
 #include <string_view>
 #include <vector>
 namespace voyemu {
+// The launcher that answers -accel-check for a launch: the program itself, or the emulator launcher
+// of the SDK for an engine that Windows starts directly from emulator/qemu/<host>/.
+inline std::filesystem::path
+android_acceleration_check_program(const std::filesystem::path &program) {
+    if (!program.filename().string().starts_with("qemu-system-")) {
+        return program;
+    }
+
+    return program.parent_path().parent_path().parent_path() /
+           ("emulator" + std::string(os::executable_suffix));
+}
+
 // The pinned emulator reports whether this host accelerates its guest: with the environment of the
 // launch, -accel-check exits 0 when the hypervisor is usable and with another code, such as 11
 // without access to it, otherwise.
@@ -19,6 +31,7 @@ android_acceleration_usable(const ProcessSpec &emulator,
                             const std::function<ProcessResult(const ProcessSpec &)> &run) {
     auto check = emulator;
 
+    check.executable = android_acceleration_check_program(emulator.executable);
     check.arguments = {"-accel-check"};
     check.output.clear();
     check.detached = false;
@@ -72,10 +85,20 @@ inline std::filesystem::path android_runtime_sdk_root(const std::filesystem::pat
     return root / ".local/toolchains/native-sdk";
 }
 
-// The Windows launcher rejects ARM64 on x64; select its shipped ARM64 backend directly.
-inline std::filesystem::path android_sdk_program(const std::filesystem::path &sdk, bool windows) {
-    return windows ? sdk / "emulator" / "qemu" / "windows-x86_64" / "qemu-system-aarch64.exe"
+// The Windows launcher rejects ARM64 on x64, so Windows starts the shipped engine of the guest ABI
+// directly, qemu-system-aarch64.exe or qemu-system-x86_64.exe.
+inline std::filesystem::path android_sdk_program(const std::filesystem::path &sdk, bool windows,
+                                                 std::string_view guest_abi = "arm64-v8a") {
+    return windows ? sdk / "emulator" / "qemu" / "windows-x86_64" /
+                             (guest_abi == "x86_64" ? "qemu-system-x86_64.exe"
+                                                    : "qemu-system-aarch64.exe")
                    : sdk / "emulator" / "emulator";
+}
+
+// The engine of an x86_64 guest without a window: emulator/qemu/<host>/qemu-system-x86_64-headless
+// with the executable suffix of the host.
+inline std::filesystem::path android_sdk_headless_engine(const std::filesystem::path &engines) {
+    return engines / ("qemu-system-x86_64-headless" + std::string(os::executable_suffix));
 }
 
 // Windows SDK ships the formatter with platform-tools, not emulator/bin64.
@@ -136,9 +159,11 @@ inline std::string passion_clock_trace_file(const char *value) {
 
 // Windows ARM64 uses multi-threaded TCG with host-paced virtual timers.
 // Pinned SDK capability probe verifies four distinct owned vCPU threads; virt supplies HDA PCI.
-inline std::vector<std::string> android_sdk_machine_arguments(bool windows,
-                                                              bool diagnostic_native = false) {
-    return windows && !diagnostic_native
+// An x86_64 guest keeps the machine of its engine and the hypervisor that -accel selects.
+inline std::vector<std::string>
+android_sdk_machine_arguments(bool windows, bool diagnostic_native = false,
+                              std::string_view guest_abi = "arm64-v8a") {
+    return windows && !diagnostic_native && guest_abi != "x86_64"
                    ? std::vector<std::string>{"-qemu", "-machine", "type=virt", "-accel",
                                               "tcg,thread=multi"}
                    : std::vector<std::string>{};

@@ -113,6 +113,24 @@ int main() {
             throw std::runtime_error("Mac launcher changed");
         }
 
+        // Windows starts the x86_64 engine directly too, and its launcher answers -accel-check.
+        const auto x86_engine = android_sdk_program(sdk, true, "x86_64");
+
+        if (x86_engine != sdk / "emulator/qemu/windows-x86_64/qemu-system-x86_64.exe" ||
+            android_sdk_program(sdk, false, "x86_64") != sdk / "emulator/emulator" ||
+            android_acceleration_check_program(x86_engine) !=
+                    sdk / ("emulator/emulator" + std::string(os::executable_suffix)) ||
+            android_acceleration_check_program(sdk / "emulator/emulator") !=
+                    sdk / "emulator/emulator") {
+            throw std::runtime_error("x86_64 engine or its acceleration check program differs");
+        }
+
+        if (android_sdk_headless_engine(sdk / "emulator/qemu/linux-x86_64") !=
+            sdk / ("emulator/qemu/linux-x86_64/qemu-system-x86_64-headless" +
+                   std::string(os::executable_suffix))) {
+            throw std::runtime_error("headless x86_64 engine lost the executable suffix");
+        }
+
         if (android_sdk_ext4_program(sdk, true) != sdk / "platform-tools" / "mke2fs.exe" ||
             android_sdk_ext4_config(sdk, true) != sdk / "platform-tools" / "mke2fs.conf") {
             throw std::runtime_error("Windows SDK formatter/config not found in shipped component");
@@ -144,6 +162,10 @@ int main() {
         if (!android_sdk_machine_arguments(true, true).empty()) {
             throw std::runtime_error(
                     "Wine native diagnostic inherited Windows TCG board arguments");
+        }
+
+        if (!android_sdk_machine_arguments(true, false, "x86_64").empty()) {
+            throw std::runtime_error("Windows x86_64 guest inherited the ARM board arguments");
         }
 
         const auto net = android_interguest_arguments(23456, false, false);

@@ -1360,7 +1360,7 @@ verified_activation_sdk_pins(const std::filesystem::path &root, const std::files
     add("qemu_backend", engines / ((x86 ? "qemu-system-x86_64" : "qemu-system-aarch64") + exe()));
 
     if (x86) {
-        add("qemu_backend_headless", engines / "qemu-system-x86_64-headless");
+        add("qemu_backend_headless", android_sdk_headless_engine(engines));
     }
 
     return pins;

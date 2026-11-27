@@ -118,7 +118,8 @@ StoppedAndroidLease::StoppedAndroidLease(const std::filesystem::path &root,
         const auto &android = manifest.at("android");
         const auto api = android.at("api").get<unsigned>();
         const auto archive = android.at("base_archive_sha256").get<std::string>();
-        require((api == 28 || api == 30) && android.at("abi") == "arm64-v8a" &&
+        require((api == 28 || api == 30) &&
+                        (android.at("abi") == "arm64-v8a" || android.at("abi") == "x86_64") &&
                         sha256_text(archive),
                 "registered Android base identity required");
         ordinary_path(path(launch_, "machine"));
@@ -127,8 +128,9 @@ StoppedAndroidLease::StoppedAndroidLease(const std::filesystem::path &root,
                         std::filesystem::equivalent(path(launch_, "base"), seed / "android"),
                 "configured Android paths differ");
         const auto sdk = path(launch_, "android_sdk_root");
-        require(std::filesystem::equivalent(path(launch_, "executable"),
-                                            android_sdk_program(sdk, true)),
+        require(std::filesystem::equivalent(
+                        path(launch_, "executable"),
+                        android_sdk_program(sdk, true, android.at("abi").get<std::string>())),
                 "configured SDK paths differ");
     } else {
         const auto runtime_parent = root / ".local/machines" / machine.name / "portable";
@@ -190,7 +192,8 @@ StoppedAndroidLease::StoppedAndroidLease(const std::filesystem::path &root,
     }
 
     frontend_image_ = path(launch_.at("frontend"), "executable");
-    const auto backend = android_sdk_program(path(launch_, "android_sdk_root"), true);
+    const auto backend = android_sdk_program(path(launch_, "android_sdk_root"), true,
+                                             launch_.value("guest_arch", std::string("arm64-v8a")));
     std::vector<std::filesystem::path> images{path(launch_, "executable"), backend,
                                               frontend_image_};
 
