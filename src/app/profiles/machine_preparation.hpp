@@ -5,6 +5,10 @@
 #include "zip_archive.hpp"
 #include <functional>
 #include <map>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
 namespace voyemu {
 struct AndroidCandidateRequest {
     std::string profile, profile_sha256, artifact_result_sha256, clean_receipt_sha256;
@@ -110,6 +114,31 @@ void android_candidate_first_oem_boot(
 std::vector<std::string> android_candidate_art_verify_packages(const Json &profile);
 // Classify typed guest argv only; host ADB routing and shell strings are never parsed.
 std::string android_candidate_command_log(const std::vector<std::string> &arguments);
+// API 30 RoleManager owns HOME: every default role grant, which any package change starts, sets
+// the preferred HOME activity to the role holder. PackageManager and RoleManager persist the
+// preferred activity and the holder separately, so a reboot can keep one store without the other.
+// The HOME role holders that `dumpsys role` reports, in its order; empty without holders.
+std::vector<std::string> android_home_role_holders(std::string_view dump);
+// The HOME role holders of the RoleManager file roles.xml; nullopt without a HOME role entry.
+std::optional<std::vector<std::string>> android_persisted_home_role_holders(std::string_view xml);
+// The polled check of a candidate step: true once check passes, false when the time ends.
+using AndroidCandidatePoll =
+        std::function<bool(const std::function<bool()> &check, int timeout_ms)>;
+// Makes package the HOME role holder in memory after set-home-activity requested it: waits for
+// the request to reach RoleManager and, when it does not, adds the holder once with
+// `cmd role add-role-holder`, which is idempotent. Throws HOME_NOT_PERSISTED when the holder
+// still differs.
+void android_candidate_home_role(
+        unsigned api, const std::string &package,
+        const std::function<std::string(const std::vector<std::string> &)> &shell,
+        const AndroidCandidatePoll &poll);
+// Before the reboot that makes the guest state cold: waits until roles.xml names package as the
+// only HOME holder, so that a grant after the reboot keeps the preferred activity. Throws
+// HOME_NOT_PERSISTED when it does not.
+void android_candidate_home_role_persisted(
+        unsigned api, const std::string &package,
+        const std::function<std::string(const std::vector<std::string> &)> &shell,
+        const AndroidCandidatePoll &poll);
 bool android_candidate_package_settings_flushed(
         const std::string &xml, const Json &configure,
         const std::optional<std::string> &home_query = std::nullopt);

@@ -248,15 +248,17 @@ struct Candidate {
         return raw(std::move(args), timeout);
     }
 
-    void wait(const std::function<bool()> &check, int milliseconds, const std::string &what) {
+    // Polls check until it passes (true) or the bounded time ends (false); last keeps the text of
+    // the last failed check.
+    bool poll(const std::function<bool()> &check, int milliseconds, const std::string &what,
+              std::string &last) {
         const auto end = Clock::now() + std::chrono::milliseconds(remaining(milliseconds));
-        std::string last;
 
         while (Clock::now() < end) {
             need(process.alive(), "owned emulator exited while waiting: " + what);
             try {
                 if (check()) {
-                    return;
+                    return true;
                 }
             } catch (const std::exception &e) {
                 last = e.what();
@@ -266,7 +268,24 @@ struct Candidate {
             std::this_thread::sleep_for(std::chrono::milliseconds(250));
         }
 
-        throw VoyemuError("MACHINE_PREPARATION", "timeout " + what + ": " + last);
+        return false;
+    }
+
+    void wait(const std::function<bool()> &check, int milliseconds, const std::string &what) {
+        std::string last;
+
+        if (!poll(check, milliseconds, what, last)) {
+            throw VoyemuError("MACHINE_PREPARATION", "timeout " + what + ": " + last);
+        }
+    }
+
+    // The bounded polls of the HOME role steps, with the shell of the candidate.
+    AndroidCandidatePoll home_role_poll(const std::string &what) {
+        return [this, what](const std::function<bool()> &check, int milliseconds) {
+            std::string last;
+
+            return poll(check, milliseconds, what, last);
+        };
     }
 
     // Waits for a boot of the emulator without a time limit: until check passes, the emulator

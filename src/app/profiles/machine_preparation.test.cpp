@@ -2493,6 +2493,198 @@ static void qinggan09_home_launcher_crash_fixture() {
     check(android_candidate_home_priorities_ready(wanted, declared));
 }
 
+// A guest of API 30 that keeps HOME in two stores: PackageManager persists the preferred HOME
+// activity, RoleManager the HOME role holder, each asynchronously. A reboot restores both from
+// disk, and the first default role grant after it, which a package change starts, sets the
+// preferred activity to the role holder. Each guest command is one tick of the guest clock.
+struct HomeRoleGuest {
+    std::string preferred = "com.android.launcher3", preferred_disk = "com.android.launcher3",
+                role = "com.android.launcher3", role_disk = "com.android.launcher3";
+    // Ticks after set-home-activity until the request reaches RoleManager (negative: never),
+    // and ticks until RoleManager writes roles.xml after its holder changes (negative: never).
+    int role_lag = 2, disk_lag = 4;
+    bool add_effective = true;
+    unsigned tick = 0, adds = 0;
+    std::optional<unsigned> role_at, disk_at;
+    std::string requested;
+
+    void advance() {
+        ++tick;
+
+        if (role_at && tick >= *role_at) {
+            role = requested;
+            role_at.reset();
+
+            if (disk_lag >= 0) {
+                disk_at = tick + static_cast<unsigned>(disk_lag);
+            }
+        }
+
+        if (disk_at && tick >= *disk_at) {
+            role_disk = role;
+            disk_at.reset();
+        }
+
+        preferred_disk = preferred;
+    }
+
+    std::string shell(const std::vector<std::string> &command) {
+        advance();
+
+        if (command.size() == 6 && command[2] == "set-home-activity") {
+            preferred = command[5].substr(0, command[5].find('/'));
+            requested = preferred;
+
+            if (role_lag >= 0) {
+                role_at = tick + static_cast<unsigned>(role_lag);
+            }
+
+            return "Success";
+        }
+
+        if (command == std::vector<std::string>{"dumpsys", "role"}) {
+            return "ROLE MANAGER STATE (dumpsys role)\n  user_states={\n    user_id=0\n    "
+                   "roles={\n      {\n        name=android.app.role.ASSISTANT\n      }\n      "
+                   "{\n        name=android.app.role.HOME\n        holders=" +
+                   role + "\n      }\n    }\n  }\n";
+        }
+
+        if (command.size() == 7 && command[1] == "role" && command[2] == "add-role-holder") {
+            ++adds;
+
+            if (add_effective) {
+                requested = command[6];
+                role_at = tick;
+                advance();
+            }
+
+            return {};
+        }
+
+        if (command.size() == 2 && command[0] == "cat") {
+            return "<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>\n<roles version=\"-1\" "
+                   "packagesHash=\"00\">\n  <role name=\"android.app.role.ASSISTANT\" />\n  "
+                   "<role name=\"android.app.role.HOME\">\n    <holder name=\"" +
+                   role_disk + "\" />\n  </role>\n</roles>\n";
+        }
+
+        throw std::runtime_error("unexpected guest command");
+    }
+
+    // Reboot, then the first default role grant of the new boot.
+    void reboot_and_grant() {
+        preferred = preferred_disk;
+        role = role_disk;
+        role_at.reset();
+        disk_at.reset();
+        preferred = preferred_disk = role;
+    }
+};
+
+static void home_role_fixture() {
+    const std::string launcher = "com.voyah.os.carlauncher",
+                      component = launcher + "/com.voyah.os.carlauncher.LauncherActivityMain";
+
+    check(android_home_role_holders("        name=android.app.role.HOME\n        holders=a.b, c.d\n"
+                                    "      }\n        name=android.app.role.SMS\n"
+                                    "        holders=e.f\n") ==
+                  std::vector<std::string>{"a.b", "c.d"} &&
+          android_home_role_holders("        name=android.app.role.HOME\n      }\n").empty() &&
+          android_home_role_holders("name=android.app.role.HOME_EXTRA\nholders=a.b\n").empty());
+    check(android_persisted_home_role_holders("<role name=\"android.app.role.HOME\" />") ==
+                  std::vector<std::string>{} &&
+          !android_persisted_home_role_holders("<role name=\"android.app.role.SMS\" />") &&
+          android_persisted_home_role_holders(
+                  "<role name=\"android.app.role.HOME\">\n<holder name=\"a.b\" />\n</role>") ==
+                  std::vector<std::string>{"a.b"});
+
+    // Preparation as it runs: set HOME, wait for its holder, then for both persisted stores,
+    // reboot.
+    const auto prepare = [&](HomeRoleGuest &guest, unsigned api) {
+        const auto shell = [&](const std::vector<std::string> &command) {
+            return guest.shell(command);
+        };
+        const AndroidCandidatePoll poll = [&](const std::function<bool()> &ready, int timeout) {
+            for (int i = 0; i < timeout / 250; ++i) {
+                if (ready()) {
+                    return true;
+                }
+
+                guest.advance();
+            }
+
+            return false;
+        };
+        shell({"cmd", "package", "set-home-activity", "--user", "0", component});
+        android_candidate_home_role(api, launcher, shell, poll);
+        check(poll(
+                [&] {
+                    return guest.preferred_disk == launcher;
+                },
+                120000));
+        android_candidate_home_role_persisted(api, launcher, shell, poll);
+        guest.reboot_and_grant();
+    };
+    const auto rejected = [&](HomeRoleGuest &guest, const std::string &text) {
+        try {
+            prepare(guest, 30);
+        } catch (const std::exception &error) {
+            return std::string(error.what()) == "HOME_NOT_PERSISTED: " + text;
+        }
+
+        return false;
+    };
+
+    // The KLG failure: RoleManager writes roles.xml long after PackageManager writes the preferred
+    // activity, so a reboot right after the preferred activity keeps the old holder on disk.
+    for (const int disk_lag : {0, 4, 40, 200}) {
+        HomeRoleGuest guest;
+        guest.disk_lag = disk_lag;
+        prepare(guest, 30);
+        check(guest.preferred == launcher && guest.role == launcher && guest.adds == 0);
+    }
+
+    // A set-home-activity request that never reaches RoleManager gets one idempotent add.
+    HomeRoleGuest lost;
+    lost.role_lag = -1;
+    prepare(lost, 30);
+    check(lost.preferred == launcher && lost.adds == 1);
+
+    HomeRoleGuest refused;
+    refused.role_lag = -1;
+    refused.add_effective = false;
+    check(rejected(refused, "HOME role holder differs: com.android.launcher3") &&
+          refused.adds == 1);
+
+    HomeRoleGuest unwritten;
+    unwritten.disk_lag = -1;
+    check(rejected(unwritten, "persisted HOME role holder differs: com.android.launcher3"));
+
+    // API 28 has no RoleManager; the HOME steps send no guest command there.
+    unsigned commands = 0;
+    android_candidate_home_role(
+            28, launcher,
+            [&](const std::vector<std::string> &) {
+                ++commands;
+
+                return std::string{};
+            },
+            [](const std::function<bool()> &, int) {
+                return false;
+            });
+    android_candidate_home_role_persisted(
+            28, launcher,
+            [&](const std::vector<std::string> &) {
+                ++commands;
+
+                return std::string{};
+            },
+            [](const std::function<bool()> &, int) {
+                return false;
+            });
+    check(commands == 0);
+}
+
 static void configure_settings_fixture() {
     const Json settings = {{"global",
                             {{"device_name", "Voyemu"},
@@ -2751,6 +2943,12 @@ int main(int argc, char **argv) {
 
         if (argc == 2 && std::string_view(argv[1]) == "--configure-settings") {
             configure_settings_fixture();
+
+            return 0;
+        }
+
+        if (argc == 2 && std::string_view(argv[1]) == "--home-role") {
+            home_role_fixture();
 
             return 0;
         }

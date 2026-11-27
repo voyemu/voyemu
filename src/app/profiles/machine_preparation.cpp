@@ -119,6 +119,154 @@ Json save_android_candidate_ui_observation(const std::filesystem::path &director
     return normalized;
 }
 
+std::vector<std::string> android_home_role_holders(std::string_view dump) {
+    std::vector<std::string> holders;
+    bool home = false;
+    std::istringstream input{std::string(dump)};
+
+    for (std::string line; std::getline(input, line);) {
+        const auto first = line.find_first_not_of(" \t"), last = line.find_last_not_of(" \t\r");
+        const auto field = first == std::string::npos ? std::string{}
+                                                      : line.substr(first, last - first + 1);
+
+        if (!home) {
+            home = field == "name=android.app.role.HOME";
+            continue;
+        }
+
+        if (!field.starts_with("holders=")) {
+            break;
+        }
+
+        std::istringstream names(field.substr(8));
+
+        for (std::string name; std::getline(names, name, ',');) {
+            name.erase(0, name.find_first_not_of(' '));
+
+            if (!name.empty()) {
+                holders.push_back(name);
+            }
+        }
+    }
+
+    return holders;
+}
+
+std::optional<std::vector<std::string>> android_persisted_home_role_holders(std::string_view xml) {
+    const std::string_view open = R"xml(<role name="android.app.role.HOME")xml";
+    const auto begin = xml.find(open);
+
+    if (begin == std::string_view::npos) {
+        return std::nullopt;
+    }
+
+    const auto header_end = xml.find('>', begin);
+
+    if (header_end == std::string_view::npos) {
+        return std::nullopt;
+    }
+
+    std::vector<std::string> holders;
+
+    if (xml[header_end - 1] == '/') {
+        return holders;
+    }
+
+    const auto end = xml.find("</role>", header_end);
+
+    if (end == std::string_view::npos) {
+        return std::nullopt;
+    }
+
+    const std::string body(xml.substr(header_end + 1, end - header_end - 1));
+    const std::regex holder(R"xml(<holder\s+name="([^"]+)"\s*/>)xml");
+
+    for (auto it = std::sregex_iterator(body.begin(), body.end(), holder);
+         it != std::sregex_iterator(); ++it) {
+        holders.push_back((*it)[1].str());
+    }
+
+    return holders;
+}
+
+namespace {
+constexpr int home_role_memory_ms = 30000, home_role_disk_ms = 60000;
+const std::filesystem::path home_role_file =
+        "/data/misc_de/0/apexdata/com.android.permission/roles.xml";
+
+std::string joined_holders(const std::vector<std::string> &holders) {
+    std::string result;
+
+    for (const auto &holder : holders) {
+        result += (result.empty() ? "" : ",") + holder;
+    }
+
+    return result.empty() ? "none" : result;
+}
+} // namespace
+
+void android_candidate_home_role(
+        unsigned api, const std::string &package,
+        const std::function<std::string(const std::vector<std::string> &)> &shell,
+        const AndroidCandidatePoll &poll) {
+    if (api < 30) {
+        return;
+    }
+
+    std::vector<std::string> holders;
+    const auto holder_ready = [&] {
+        holders = android_home_role_holders(shell({"dumpsys", "role"}));
+
+        return holders == std::vector<std::string>{package};
+    };
+
+    if (poll(holder_ready, home_role_memory_ms)) {
+        logging::write(logging::Level::debug, "prepare", "HOME role holder follows the preference",
+                       {{"package", package}});
+
+        return;
+    }
+
+    logging::write(logging::Level::debug, "prepare", "HOME role holder differs, adding it",
+                   {{"package", package}, {"holders", joined_holders(holders)}});
+    shell({"cmd", "role", "add-role-holder", "--user", "0", "android.app.role.HOME", package});
+
+    if (!poll(holder_ready, home_role_memory_ms)) {
+        throw VoyemuError("HOME_NOT_PERSISTED",
+                          "HOME role holder differs: " + joined_holders(holders));
+    }
+
+    logging::write(logging::Level::debug, "prepare", "HOME role holder added",
+                   {{"package", package}});
+}
+
+void android_candidate_home_role_persisted(
+        unsigned api, const std::string &package,
+        const std::function<std::string(const std::vector<std::string> &)> &shell,
+        const AndroidCandidatePoll &poll) {
+    if (api < 30) {
+        return;
+    }
+
+    std::optional<std::vector<std::string>> holders;
+
+    if (!poll(
+                [&] {
+                    holders = android_persisted_home_role_holders(
+                            shell({"cat", home_role_file.generic_string()}));
+
+                    return holders == std::vector<std::string>{package};
+                },
+                home_role_disk_ms)) {
+        throw VoyemuError("HOME_NOT_PERSISTED",
+                          "persisted HOME role holder differs: " +
+                                  (holders ? joined_holders(*holders) : "no HOME role"));
+    }
+
+    logging::write(logging::Level::debug, "prepare", "HOME role holder persisted",
+                   {{"package", package}});
+}
+
 bool android_candidate_package_settings_flushed(const std::string &xml, const Json &config,
                                                 const std::optional<std::string> &home_query) {
     for (const auto &name : config.value("disabled", Json::array())) {

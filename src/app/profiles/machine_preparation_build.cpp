@@ -1326,6 +1326,17 @@ Json build_android_candidate(const std::filesystem::path &root,
                             profile.value("configure", Json::object()));
                 },
                 120000, "PackageManager settings flush");
+
+        if (profile.value("configure", Json::object()).contains("home")) {
+            android_candidate_home_role_persisted(
+                    android_candidate_api(profile),
+                    profile.at("configure").at("home").get<std::string>(),
+                    [&](const auto &command) {
+                        return candidate.shell(command);
+                    },
+                    candidate.home_role_poll("persisted HOME role holder"));
+        }
+
         candidate.shell({"sync"});
         configure_settings(
                 candidate,

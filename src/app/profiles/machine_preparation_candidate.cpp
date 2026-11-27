@@ -1117,6 +1117,12 @@ std::string home_component(Candidate &c, const Json &config, bool establish) {
             } catch (...) { /* Ignored: the failure report records only available evidence. */
             }
 
+            try {
+                report["role_holders"] =
+                        android_home_role_holders(c.shell({"dumpsys", "role"}, 5000));
+            } catch (...) { /* Ignored: the failure report records only available evidence. */
+            }
+
             write_private_json(c.stage / "home-failure.json", report);
         } catch (...) { /* Ignored: the failure report must not replace the original failure. */
         }
@@ -1340,6 +1346,12 @@ void configure(Candidate &c, const Json &profile, std::vector<Installed> &instal
 
     if (config.contains("home")) {
         home_component(c, config, true);
+        android_candidate_home_role(
+                android_candidate_api(profile), config.at("home").get<std::string>(),
+                [&](const auto &command) {
+                    return c.shell(command);
+                },
+                c.home_role_poll("HOME role holder"));
     }
 
     for (const auto &value : config.value("overlays", Json::array())) {
