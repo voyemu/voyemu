@@ -9,20 +9,6 @@ constexpr std::array<const char *, 8> android_disk_files{
         {"userdata-qemu.img", "cache.img", "encryptionkey.img", "userdata-qemu.img.qcow2",
          "cache.img.qcow2", "encryptionkey.img.qcow2", "system.img.qcow2", "vendor.img.qcow2"}};
 
-bool writable_system_overlay(std::string_view name) {
-    return name == "system.img.qcow2" || name == "vendor.img.qcow2";
-}
-
-void reject_signed_android_overlays(const std::filesystem::path &folder) {
-    for (const auto *name : {"system.img.qcow2", "vendor.img.qcow2"}) {
-        if (std::filesystem::exists(std::filesystem::symlink_status(folder / name))) {
-            throw VoyemuError("SIGNED_ANDROID", "signed Android cannot use writable " +
-                                                        std::string(name) + " in " +
-                                                        folder.string());
-        }
-    }
-}
-
 void android_regular_input(const std::filesystem::path &path) {
     if (!std::filesystem::is_regular_file(std::filesystem::symlink_status(path))) {
         throw VoyemuError("ANDROID_AVD_IMAGE", "prepared regular file required");
@@ -35,8 +21,7 @@ void android_regular_input(const std::filesystem::path &path) {
 } // namespace session_detail
 
 void normalize_android_disk_backings(const std::filesystem::path &machine,
-                                     const std::filesystem::path &qemu_img, const Json &binding,
-                                     bool signed_system) {
+                                     const std::filesystem::path &qemu_img, const Json &binding) {
     Json system_spec = {{"machine", machine.string()}, {"api", 30}};
 
     if (!binding.is_null()) {
@@ -57,11 +42,6 @@ void normalize_android_disk_backings(const std::filesystem::path &machine,
     // Only the four declared same-machine raw partitions may be made relative.
     for (const char *name :
          {"userdata-qemu.img", "encryptionkey.img", "system.img", "vendor.img"}) {
-        if (signed_system &&
-            (std::string_view(name) == "system.img" || std::string_view(name) == "vendor.img")) {
-            continue;
-        }
-
         const bool selected = std::string_view(name) == "system.img" && !binding.is_null();
         const auto overlay = selected ? system.overlay : machine / (std::string(name) + ".qcow2");
         android_regular_input(overlay);
@@ -262,7 +242,7 @@ std::filesystem::path session_detail::prepare_android_avd_impl(
         const std::string &avd, const std::filesystem::path &source,
         const std::string &config_sha256, const std::filesystem::path &base, bool machine_start,
         unsigned api, bool diagnostic_native, const std::filesystem::path &runtime,
-        const Json &binding, const std::filesystem::path &previous_machine, bool signed_system) {
+        const Json &binding, const std::filesystem::path &previous_machine) {
     if (api != 28 && api != 30) {
         throw VoyemuError("ANDROID_AVD", "supported API28/API30 required");
     }
@@ -293,11 +273,6 @@ std::filesystem::path session_detail::prepare_android_avd_impl(
 
     const auto system = android_system_binding(system_spec);
 
-    if (signed_system) {
-        reject_signed_android_overlays(machine);
-        reject_signed_android_overlays(runtime.empty() ? home / "content" : runtime);
-    }
-
     if (!binding.is_null()) {
         for (const auto &path : {system.raw, system.overlay}) {
             if (std::filesystem::canonical(path) != path) {
@@ -307,10 +282,6 @@ std::filesystem::path session_detail::prepare_android_avd_impl(
     }
 
     for (auto name : android_disk_files) {
-        if (signed_system && writable_system_overlay(name)) {
-            continue;
-        }
-
         if (std::string_view(name) != "cache.img" && std::string_view(name) != "cache.img.qcow2") {
             android_regular_input(std::string_view(name) == "system.img.qcow2" ? system.overlay
                                                                                : machine / name);
@@ -375,7 +346,7 @@ std::filesystem::path session_detail::prepare_android_avd_impl(
 
     prepare_android_avd_version_marker(
             content, (base.empty() ? machine / "base" : base) / "build.prop", machine_start);
-    // Writable Android builds give the SDK system/vendor overlays beside the AVD configuration.
+    // The SDK always opens system/vendor overlays beside the AVD configuration.
     // AvdInfo also needs the encryption raw image here to select the correct boot-device MMIO
     // index. Link required disks to the portable machine; never copy them.
     const auto same_storage = [=](const std::filesystem::path &a, const std::filesystem::path &b) {
@@ -388,10 +359,6 @@ std::filesystem::path session_detail::prepare_android_avd_impl(
 
     for (const char *name : {"system.img.qcow2", "vendor.img.qcow2", "system.img", "vendor.img",
                              "encryptionkey.img"}) {
-        if (signed_system && writable_system_overlay(name)) {
-            continue;
-        }
-
         const bool selected = !binding.is_null() && (std::string_view(name) == "system.img" ||
                                                      std::string_view(name) == "system.img.qcow2");
         auto disk = selected
@@ -525,7 +492,6 @@ std::filesystem::path session_detail::prepare_android_avd_impl(
                         {"template_sha256", config_sha256},
                         {"userdata_path", (machine / "userdata-qemu.img").string()},
                         {"disk_paths", android_disk_files},
-                        {"signed_system", signed_system},
                         {"system_specification", system_spec}});
 
     return content;
@@ -571,18 +537,8 @@ void session_detail::verify_android_avd_storage_impl(const std::filesystem::path
 
     const auto system = android_system_binding(
             inputs.value("system_specification", Json{{"machine", machine.string()}}));
-    const bool signed_system = inputs.value("signed_system", false);
-
-    if (signed_system) {
-        reject_signed_android_overlays(machine);
-        reject_signed_android_overlays(inputs.at("content").get<std::string>());
-    }
 
     for (auto name : android_disk_files) {
-        if (signed_system && writable_system_overlay(name)) {
-            continue;
-        }
-
         if (std::string_view(name) != "cache.img" && std::string_view(name) != "cache.img.qcow2") {
             android_regular_input(std::string_view(name) == "system.img.qcow2" ? system.overlay
                                                                                : machine / name);

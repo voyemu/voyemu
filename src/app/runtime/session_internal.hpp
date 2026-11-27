@@ -229,8 +229,7 @@ prepare_android_avd_impl(const std::filesystem::path &home, const std::filesyste
                          const std::string &config_sha256, const std::filesystem::path &base,
                          bool machine_start, unsigned api = 28, bool diagnostic_native = false,
                          const std::filesystem::path &runtime = {}, const Json &binding = Json(),
-                         const std::filesystem::path &previous_machine = {},
-                         bool signed_system = false);
+                         const std::filesystem::path &previous_machine = {});
 void verify_android_avd_storage_impl(const std::filesystem::path &home,
                                      const std::filesystem::path &machine, const std::string &avd,
                                      bool machine_start, bool diagnostic_native = false,

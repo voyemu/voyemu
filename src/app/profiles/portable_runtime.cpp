@@ -1,7 +1,7 @@
+#include "android_boot_pins.hpp"
 #include "check.hpp"
 #include "os/platform.hpp"
 #include "portable_runtime_internal.hpp"
-#include "signed_android.hpp"
 
 namespace voyemu {
 using namespace portable_detail;
@@ -1789,7 +1789,7 @@ static Json inspect_portable_runtime_impl(const std::filesystem::path &root,
     const auto definition = portable_profile_definition(root, profile, machine, seed);
     const auto family = runtime_profile_reference(definition, profile);
     check_android_guest_identity(definition, manifest);
-    const auto boot_pins = checked_signed_android_boot_pins(seed, definition, manifest);
+    const auto boot_pins = checked_android_boot_pins(seed, definition, manifest);
     const auto api = manifest.at("android").at("api").get<unsigned>();
     const bool android_only = manifest.contains("scope");
 
@@ -1817,7 +1817,7 @@ static Json inspect_portable_runtime_impl(const std::filesystem::path &root,
                                                                                              : 0) +
                                  (manifest.at("android").contains("boot_files") ? 1 : 0) +
                                  (manifest.at("android").contains("development_kernel") ? 1 : 0) +
-                                 (manifest.at("android").contains("signed_android") ? 1 : 0) +
+                                 (manifest.at("android").contains("vbmeta_digest") ? 1 : 0) +
                                  (manifest.at("android").contains("can_model_receipt") ? 1 : 0),
          "unknown portable fields");
     (void)checked_development_kernel(seed, definition, manifest);

@@ -35,19 +35,11 @@ tree="$work/$name"
 mkdir "$tree"
 cp "$stage/$launcher" "$tree/$launcher"
 cp -R "$stage/notices" "$tree/notices"
-if [[ "$host" == linux-x64 ]]; then
-    mkdir -p "$tree/libexec/voyemu"
-    cp -R "$stage/libexec/voyemu/avd" "$tree/libexec/voyemu/avd"
-fi
 git -C "$project" archive --format=tar HEAD profiles README.md README.ru.md LICENSE CHANGELOG.md \
     CHANGELOG.ru.md SECURITY.md SECURITY.ru.md | tar -C "$tree" -xf -
 find "$tree" -type d -exec chmod 755 {} +
 find "$tree" -type f -exec chmod 644 {} +
 chmod 755 "$tree/$launcher"
-if [[ "$host" == linux-x64 ]]; then
-    find "$tree/libexec/voyemu/avd" -type f \( -name '*.sh' -o -name 'voyemu_avd_*' \) \
-        -exec chmod 755 {} +
-fi
 cd "$work"
 archive="$output/$file"
 if [[ "$extension" == tar.xz ]]; then

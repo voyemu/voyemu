@@ -31,12 +31,12 @@ A build target prepares one firmware for one guest ABI. The OEM inputs and recip
 | Field | Meaning |
 | --- | --- |
 | `guestAbi` | The Android ABI of the guest, `arm64-v8a` or `x86_64` |
-| `preparation` | `sdk` for the live preparation of the SDK image, `signed-offline` for a signed system built offline |
+| `preparation` | `sdk` for the preparation of the SDK image on its running guest |
 | `androidBase` | A pinned Android base in `profiles/common/android-bases/` instead of the `android` base of the profile |
 | `developmentKernel` | The [development kernel](components.md#development-kernels) of the target ABI; a target of another ABI than the kernel of the profile declares its own |
 | `emulator` | Emulator settings of the target: `memory`, `gpuMode`, and `acceleration` set to `required` for a guest that needs hardware acceleration |
 
-`deps` and `build` take the target whose guest ABI is that of the host processor; `--target` selects any declared target, and a guest of another ABI runs in software translation. The files of one target live in `targets/<target>/`. The [Passion profile](../profiles/passion-11-russian-20260403-2.1.4.80.md) declares the `arm` and `x86` targets. See [selecting a target](preparation.md#build).
+`deps` and `build` take the target whose guest ABI is that of the host processor; `--target` selects any declared target, and a guest of another ABI runs in software translation. The [Passion profile](../profiles/passion-11-russian-20260403-2.1.4.80.md) declares the `arm` and `x86` targets. See [selecting a target](preparation.md#build).
 
 The `wheel` field of `profile.json` names the steering-wheel artwork in `assets` and the Android key routes in `androidRoutes`; `provider` set to `com.voyemu.input.wheel` delivers the wheel to Android through that content provider of the profile instead of the routes.
 
@@ -62,7 +62,7 @@ A machine is a prepared directory under `machines/<name>/`. `voyemu build PROFIL
 
 ## Copying and moving a machine
 
-A machine carries everything a launch needs from the profile, so it runs without `profiles/` and moves as one directory. Writable disks inside the machine, the Android QCOW2 layers among them, keep installed applications, files and settings: copy or archive the whole machine directory after a clean stop. Session state lives separately in `.local/machines/<name>/` and is recreated when absent; see [local roots](local-roots.md).
+A machine carries everything a launch needs from the profile, so it runs without `profiles/` and moves as one directory. Writable disks inside the machine, the Android QCOW2 layers among them, keep installed applications, files and settings: copy or archive the whole machine directory after a clean stop. Each QCOW2 layer names its raw image relative to the layer, so the copy keeps working in another directory. Session state lives separately in `.local/machines/<name>/` and is recreated when absent; see [local roots](local-roots.md).
 
 A machine needs the installed host tools and a compatible backend for the guest ABI recorded in its manifest. A cluster launch needs the QEMU and ANGLE binding in `.local/toolchains/installed.json`, which machine preparation writes on its host; `deps` installs the engine and `start` does not create the binding, so on a host without it start the machine with `--cluster=off`. `voyemu check MACHINE_PATH` verifies the stored files and the launch configuration without starting guests.
 

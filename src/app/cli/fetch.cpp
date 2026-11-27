@@ -1878,7 +1878,6 @@ Json fetch_native_inputs(const std::filesystem::path &root, std::string_view pro
 
     const auto definition = target.empty() ? load_profile(root, profile)
                                            : authoring_profile(root, profile, target);
-    const auto multimedia_only = profile_multimedia_only(definition);
     const auto profile_name = profile_display_name(root, profile);
     const auto inputs = original_input_plan(definition);
     const auto own_originals = root / ".local/profiles" / input_profile / "originals";
@@ -2133,7 +2132,7 @@ Json fetch_native_inputs(const std::filesystem::path &root, std::string_view pro
 
     const auto native_qnx = recipe / "profile-qnx.json";
 
-    if (!multimedia_only && std::filesystem::exists(native_qnx)) {
+    if (std::filesystem::exists(native_qnx)) {
         if (update.empty()) {
             materialize_qnx_originals(root, input_profile, jdk, offline);
         }
@@ -2283,17 +2282,15 @@ Json fetch_native_inputs(const std::filesystem::path &root, std::string_view pro
                                   {"pins_sha256", sha256_bytes(source_pins.dump())},
                                   {"verified", true}};
 
-    if (!multimedia_only) {
-        fetch_detail::bind_owner_inputs(root, input_profile, definition, imported, result);
-    }
+    fetch_detail::bind_owner_inputs(root, input_profile, definition, imported, result);
 
     if (!imported.is_null()) {
         result["owner_update"] = imported;
     }
 
-    // The shared owner cache accepts only its bound native-inputs receipt. A signed target
-    // records its selected inputs in the separate Android preparation stage.
-    if (target.empty() || !multimedia_only) {
+    // The shared owner cache accepts only its bound native-inputs receipt. A target with its own
+    // Android base records that base in its Android preparation stage instead.
+    if (target.empty() || !definition.at("target").contains("androidBase")) {
         write_private_json(root / ".local/profiles" / std::string(profile) / "native-inputs.json",
                            result);
     }

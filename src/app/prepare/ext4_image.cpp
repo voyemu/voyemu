@@ -387,7 +387,8 @@ std::string safe_path(const std::string &value) {
 Json extract_pinned_ext4_files(const std::filesystem::path &image, const std::string &pin,
                                const std::vector<std::string> &paths,
                                const std::filesystem::path &destination, std::uint64_t reserve,
-                               std::string_view logical_partition) {
+                               std::string_view logical_partition,
+                               std::map<std::string, Ext4Inode> *inodes) {
     if (!sha256_text(pin) || paths.empty() || paths.size() > 256) {
         bad("bounded pinned extraction required");
     }
@@ -441,6 +442,13 @@ Json extract_pinned_ext4_files(const std::filesystem::path &image, const std::st
 
         if ((number(record, 0, 2) & 0170000) != 0100000) {
             bad("requested inode is not a regular file; aliases unsupported");
+        }
+
+        if (inodes) {
+            (*inodes)[path] = {
+                    static_cast<unsigned>(number(record, 0, 2) & 07777),
+                    static_cast<unsigned>(number(record, 2, 2) | number(record, 120, 2) << 16),
+                    static_cast<unsigned>(number(record, 24, 2) | number(record, 122, 2) << 16)};
         }
 
         // VehicleSetting of the Qinggan11 6.11.1 and 7.3.1 system images exceeds the 256 MiB file

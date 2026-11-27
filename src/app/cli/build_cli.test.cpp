@@ -249,12 +249,6 @@ int main(int argc, char **argv) {
                     std::filesystem::copy_file(project / base, root / base,
                                                std::filesystem::copy_options::skip_existing);
                 }
-
-                if (std::filesystem::is_directory(source / "targets" / name)) {
-                    ensure_private_directory(expected / "targets");
-                    std::filesystem::copy(source / "targets" / name, expected / "targets" / name,
-                                          std::filesystem::copy_options::recursive);
-                }
             }
 
             ProcessSpec spec;
@@ -286,12 +280,10 @@ int main(int argc, char **argv) {
                 const bool kernel_missing = !entry.contains("developmentKernel") &&
                                             kernel.is_object() && kernel.at("abi") != abi;
 
-                if (kernel_missing ||
-                    (entry.value("preparation", std::string{}) == "signed-offline" &&
-                     !os::host_signed_android_preparation)) {
+                if (kernel_missing) {
                     require(result.output.find("Voyemu: PROFILE_TARGET:") != std::string::npos &&
                                     result.output.find("Preparing machine") == std::string::npos,
-                            "signed target did not name the missing host capability: " +
+                            "a target without the kernel of its ABI did not name it: " +
                                     result.output);
                 } else {
                     require(result.output.find("Selected " + name + " (" + abi + ") for " +

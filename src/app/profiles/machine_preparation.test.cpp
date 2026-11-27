@@ -2868,6 +2868,23 @@ int main(int argc, char **argv) {
             auto data = system;
             data.erase("target");
             check(android_candidate_system_native_libraries(data, inventory, "").empty());
+            // An x86_64 guest takes the libraries of its own ABIs; ARM code stays in the APK.
+            check(android_guest_native_abis("x86_64") ==
+                          std::vector<std::string>{"x86_64", "x86"} &&
+                  android_guest_native_abis("arm64-v8a") == std::vector<std::string>{"arm64-v8a"});
+            const std::vector<ZipEntry> mixed = {{"lib/arm64-v8a/libpag.so", 64, false},
+                                                 {"lib/x86_64/libmain.so", 48, false},
+                                                 {"lib/x86/libmain.so", 40, false}};
+            const auto x86_64 = android_candidate_system_native_libraries(system, mixed, "",
+                                                                          "x86_64");
+            check(x86_64.size() == 1 && x86_64[0].name == "lib/x86_64/libmain.so" &&
+                  android_candidate_system_native_libraries(system, mixed, "", "x86").size() == 1);
+            // A merged file keeps the guest bytes and adds only the lines it lacks.
+            check(android_candidate_merged_lines("a b\nc d\n", "c d\nusb rule\n") ==
+                          "a b\nc d\nusb rule\n" &&
+                  android_candidate_merged_lines("a b", "usb rule\n") == "a b\nusb rule\n" &&
+                  android_candidate_merged_lines("a b\nusb rule\n", "usb rule\n") ==
+                          "a b\nusb rule\n");
             auto rejects = [&](const Json &entry, const std::vector<ZipEntry> &files,
                                std::string_view xml) {
                 bool refused = false;

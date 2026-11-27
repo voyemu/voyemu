@@ -292,7 +292,7 @@ static void owner_fetch_sequence(const std::filesystem::path &project) {
     targeted["targets"] = {{"arm", {{"guestAbi", "arm64-v8a"}, {"preparation", "sdk"}}},
                            {"x86",
                             {{"guestAbi", "x86_64"},
-                             {"preparation", "signed-offline"},
+                             {"preparation", "sdk"},
                              {"androidBase", "owner-sequence-x86"},
                              {"emulator", {{"acceleration", "required"}, {"gpuMode", "host"}}}}}};
     write_private_json(selected / "profile.json", targeted);
@@ -308,7 +308,7 @@ static void owner_fetch_sequence(const std::filesystem::path &project) {
     }
     const auto owner_inventory_pin = sha256_file(destination / "native-inputs.json");
     const auto x86 = fetch_native_inputs(root, "owner-sequence", true, "", 0, {}, {}, "x86");
-    check(x86.at("android_archive").at("sha256") == x86_pin && !x86.contains("qnx") &&
+    check(x86.at("android_archive").at("sha256") == x86_pin && x86.contains("qnx") &&
                   sha256_file(destination / "native-inputs.json") == owner_inventory_pin &&
                   fetch_native_inputs(root, "owner-sequence", true, "", 0, {}, zip)
                                   .at("owner_update")

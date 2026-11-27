@@ -652,7 +652,7 @@ static void artifact_resume_checks(const std::filesystem::path &root, bool equip
                   {{"arm", {{"guestAbi", "arm64-v8a"}, {"preparation", "sdk"}}},
                    {"x86",
                     {{"guestAbi", "x86_64"},
-                     {"preparation", "signed-offline"},
+                     {"preparation", "sdk"},
                      {"androidBase", "fixture-x86"},
                      {"emulator", {{"acceleration", "required"}, {"gpuMode", "host"}}}}}}}});
         write_private_json(root / "profiles/common/android-bases/fixture-x86.json", x86_base);

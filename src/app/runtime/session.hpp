@@ -156,8 +156,7 @@ void prepare_android_avd_version_marker(const std::filesystem::path &content,
                                         bool required);
 void normalize_android_disk_backings(const std::filesystem::path &machine,
                                      const std::filesystem::path &qemu_img,
-                                     const Json &system_binding = Json(),
-                                     bool signed_system = false);
+                                     const Json &system_binding = Json());
 std::filesystem::path
 prepare_android_avd(const std::filesystem::path &home, const std::filesystem::path &machine,
                     const std::string &avd, const std::filesystem::path &source,

@@ -1,5 +1,5 @@
 #include "passion_power_prepared.hpp"
-#include "passion_signed_guest.test.hpp"
+#include "passion_x86_guest.test.hpp"
 #include <cassert>
 #include <exception>
 #include <fstream>
@@ -307,31 +307,23 @@ int main() try {
 
     auto x86_definition = composed;
     auto x86_candidate = current;
-    test::use_signed_x86_guest(x86_definition, x86_candidate);
+    test::use_x86_guest(x86_definition, x86_candidate);
     x86_candidate["display_power"] = passion_power_contract(x86_definition, x86_candidate, pins,
                                                             helpers);
-    const auto signed_images = x86_candidate.at("android").at("images");
-    assert(validate_passion_power_candidate(x86_definition, x86_candidate, signed_images,
+    const auto x86_images = x86_candidate.at("android").at("images");
+    assert(validate_passion_power_candidate(x86_definition, x86_candidate, x86_images,
                                             std::string(64, 'c')) ==
            media::PassionPowerOwner::capability());
 
-    auto repeated_boot = x86_candidate;
-    repeated_boot["signed_android"]["cold_boot_id"] =
-            repeated_boot["signed_android"]["first_boot_id"];
+    auto failed_check = x86_candidate;
+    failed_check["checks"].back()["passed"] = false;
     rejects([&] {
-        validate_passion_power_candidate(x86_definition, repeated_boot, signed_images,
-                                         std::string(64, 'c'));
-    });
-    auto unsigned_candidate = x86_candidate;
-    unsigned_candidate["signed_android"].erase("system_root_sha256");
-    rejects([&] {
-        validate_passion_power_candidate(x86_definition, unsigned_candidate, signed_images,
+        validate_passion_power_candidate(x86_definition, failed_check, x86_images,
                                          std::string(64, 'c'));
     });
 
-    // A missing field of the signed guest fails with the code of its caller.
-    for (const auto &path :
-         {"/android/abi", "/android/images/vendor.img", "/signed_android/files/vendor.img/bytes"}) {
+    // A missing field of the x86_64 guest fails with the code of its caller.
+    for (const auto &path : {"/android/abi", "/android/verified_boot/vbmeta_digest"}) {
         auto incomplete = x86_candidate;
         const Json::json_pointer pointer(path);
         incomplete[pointer.parent_pointer()].erase(pointer.back());
@@ -348,7 +340,7 @@ int main() try {
     auto wrong_cold_abi = x86_candidate;
     wrong_cold_abi["checks"][2]["expected"] = wrong_cold_abi["checks"][2]["actual"] = "arm64-v8a";
     rejects([&] {
-        validate_passion_power_candidate(x86_definition, wrong_cold_abi, signed_images,
+        validate_passion_power_candidate(x86_definition, wrong_cold_abi, x86_images,
                                          std::string(64, 'c'));
     });
 

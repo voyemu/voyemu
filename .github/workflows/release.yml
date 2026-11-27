@@ -70,7 +70,6 @@ jobs:
                   path: |
                       .local/build/stage/${{ matrix.host == 'windows-x64' && 'voyemu.exe' || 'voyemu' }}
                       .local/build/stage/notices/
-                      ${{ matrix.host == 'linux-x64' && '.local/build/stage/libexec/voyemu/avd/' || '' }}
                   if-no-files-found: error
 
     package:

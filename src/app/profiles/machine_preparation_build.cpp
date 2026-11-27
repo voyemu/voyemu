@@ -1,186 +1,57 @@
+#include "android_boot_pins.hpp"
 #include "machine_preparation_internal.hpp"
 #include "profile_catalog.hpp"
 #include "qinggan11_startup.hpp"
-#include "signed_android.hpp"
 
 // Builds an Android candidate machine from its base image, packages and install plan.
 namespace voyemu {
 using namespace machine_preparation_detail;
 
-std::filesystem::path signed_android_tools(const std::filesystem::path &root) {
-    const auto installed = root / "libexec/voyemu/avd";
+std::map<std::string, LogicalPartitionExtent> android_vbmeta_partitions(const Json &base) {
+    const auto clean = native_clean_base(base);
 
-    return std::filesystem::is_directory(installed) ? installed : root / "src/dev/avd";
+    return {{"system", {clean.system.offset, clean.system.bytes}},
+            {"system_ext", {clean.system_ext.offset, clean.system_ext.bytes}}};
 }
 
-namespace {
-constexpr Check require_signed_android{"SIGNED_ANDROID"};
-
-std::string read_signed_android_metadata(const std::filesystem::path &file, std::size_t maximum) {
-    ordinary(file);
-    require_signed_android(std::filesystem::is_regular_file(file) &&
-                                   std::filesystem::file_size(file) <= maximum,
-                           "bounded signed release metadata required");
-    std::ifstream stream(file, std::ios::binary);
-    require_signed_android(bool(stream), "signed release metadata could not be read");
-    std::string bytes(maximum + 1, '\0');
-    stream.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-    bytes.resize(static_cast<std::size_t>(stream.gcount()));
-    require_signed_android(!stream.bad() && !bytes.empty() && bytes.size() <= maximum &&
-                                   bytes.size() == std::filesystem::file_size(file),
-                           "signed release metadata read differs");
-
-    return bytes;
-}
-} // namespace
-
-Json verify_signed_android_release(const std::filesystem::path &root,
-                                   const std::filesystem::path &release,
-                                   const std::filesystem::path &key, const Json &profile) {
-    const auto require = require_signed_android;
-    const auto read = read_signed_android_metadata;
-
-    const auto &base = profile.at("android");
-    const auto identity = native_base_identity(base);
-
-    require(identity.api == 30 && identity.abi == "x86_64" && profile_signed_preparation(profile),
-            "signed Android release requires an API30 x86_64 signed-offline target");
-    ordinary(release);
-    ordinary(key);
-    require(release.is_absolute() && key.is_absolute() && std::filesystem::is_directory(release) &&
-                    std::filesystem::is_regular_file(key) && !inside(key, release),
-            "ordinary release and separate signing key required");
-    const auto verifier = signed_android_tools(root) / "verify-image.sh";
-    ordinary(verifier);
-    require(std::filesystem::is_regular_file(verifier), "signed Android verifier required");
-    ProcessSpec spec;
-    spec.executable = verifier;
-    spec.directory = root;
-    spec.arguments = {release.string(), key.string()};
-    const auto result = execute(spec, 180000, 32 * 1024);
-
-    if (result.exit_code != 0 || result.timed_out) {
-        throw VoyemuError("SIGNED_ANDROID", "release verification failed: " + result.output);
-    }
-
-    const std::regex system_root_field("(?:^|\\n)Verified system root: ([0-9a-f]{64})(?:\\n|$)");
-    std::smatch system_root;
-    require(std::regex_search(result.output, system_root, system_root_field),
-            "verified system root missing");
-    // The machine pins the SDK files by SHA-256 like every other prepared base.
-    Json files = Json::object();
-    const auto sdk = release / "sdk";
-    ordinary(sdk);
-
-    for (const auto &entry : std::filesystem::recursive_directory_iterator(sdk)) {
-        require(!entry.is_symlink() && (entry.is_directory() || entry.is_regular_file()),
-                "ordinary signed SDK files required");
-
-        if (entry.is_directory()) {
-            continue;
-        }
-
-        const auto item = entry.path().lexically_relative(sdk).generic_string();
-        relative(item);
-        const auto bytes = entry.file_size();
-        require(files.size() < 64 && bytes > 0 && bytes <= (8ULL << 30), "invalid signed SDK file");
-        files[item] = {{"sha256", sha256_file(entry.path())}, {"bytes", bytes}};
-    }
-
-    const auto properties = read(release / "release.properties", 4096);
-    const auto property_present = [&](std::string_view property, const std::string &value) {
-        return ("\n" + properties).find("\n" + std::string(property) + "=" + value + "\n") !=
-               std::string::npos;
-    };
-    const auto archive = base.at("sha256").get<std::string>();
-    require(property_present("format", "1") && property_present("baseArchiveSha256", archive),
-            "signed release does not match the source archive");
-    require(!files.empty(), "signed SDK inventory size differs");
-    const std::string vbmeta = "VerifiedBootParams.textproto";
-
-    for (const auto &[name, sha] : portable_clean_boot_pins(base)) {
-        require(files.contains(name) &&
-                        (name == vbmeta || files.at(name).at("sha256").get<std::string>() == sha),
-                "signed SDK has unexpected stock boot inputs");
-    }
-
-    const auto metadata = read(release / "sdk" / vbmeta, 4096);
-    const std::regex digest_field(
-            "\\nparam: \\\"androidboot\\.vbmeta\\.digest=([0-9a-f]{64})\\\"\\n$");
-    std::smatch match;
-    require(sha256_bytes(metadata) == files.at(vbmeta).at("sha256").get<std::string>() &&
-                    std::regex_search(metadata, match, digest_field),
-            "verified boot parameters changed");
-
-    return {{"base_archive_sha256", archive},
-            {"vbmeta_digest", match[1].str()},
-            {"system_root_sha256", system_root[1].str()},
-            {"files", files}};
-}
-
-std::map<std::string, std::string>
-checked_signed_android_boot_pins(const std::filesystem::path &seed, const Json &definition,
-                                 const Json &manifest) {
+std::map<std::string, std::string> checked_android_boot_pins(const std::filesystem::path &seed,
+                                                             const Json &definition,
+                                                             const Json &manifest) {
     need(definition.contains("android"), "profile declares no Android base");
     auto pins = portable_clean_boot_pins(definition.at("android"));
+    const auto clean = native_clean_base(definition.at("android"));
     const auto &android = manifest.at("android");
 
-    if (!android.contains("signed_android")) {
-        require_signed_android(!profile_signed_preparation(definition),
-                               "signed Android proof required for this machine");
+    if (clean.vbmeta_digest.empty()) {
+        need(!android.contains("vbmeta_digest"), "Android base binds no vbmeta digest");
 
         return pins;
     }
 
-    // runtime.json pins every signed input; the guest checks the vbmeta digest of its boot
-    // parameters and dm-verity checks the system blocks it reads.
-    const auto &proof = android.at("signed_android");
-    const auto &files = proof.at("files");
-    const std::regex boot_id("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}");
-    need(profile_signed_preparation(definition) && android.at("abi") == "x86_64" &&
-                 android.at("api") == 30 && manifest.value("scope", std::string{}) == "android" &&
-                 !manifest.contains("qnx") && proof.size() == 6 && files.is_object() &&
-                 !files.empty() && files.size() <= 64 &&
-                 proof.at("base_archive_sha256") == android.at("base_archive_sha256") &&
-                 android.at("base_archive_sha256") == definition.at("android").at("sha256") &&
-                 sha256_text(proof.at("vbmeta_digest").get<std::string>()) &&
-                 sha256_text(proof.at("system_root_sha256").get<std::string>()) &&
-                 std::regex_match(proof.at("first_boot_id").get<std::string>(), boot_id) &&
-                 std::regex_match(proof.at("cold_boot_id").get<std::string>(), boot_id) &&
-                 proof.at("first_boot_id") != proof.at("cold_boot_id"),
-         "signed Android machine requires verified release and two distinct boot IDs");
-    const auto verify_role = [&](const std::string &name, const Json &descriptor) {
-        const auto expected = files.at(name).at("sha256").get<std::string>();
-        need(sha256_text(expected) && descriptor.at("sha256").get<std::string>() == expected &&
-                     descriptor.at("bytes") == files.at(name).at("bytes") &&
-                     descriptor.at("file") == "android/" + name,
-             "immutable SDK input differs from its verified release");
+    // The machine boots its system through its own boot parameters: the stock ones with the
+    // vbmeta digest of its system image, which the guest compares at first-stage mount.
+    const std::string name = "VerifiedBootParams.textproto";
+    const auto digest = android.value("vbmeta_digest", std::string{});
+    const auto &descriptor = android.at("boot_files").at(name);
+    const auto pin = descriptor.at("sha256").get<std::string>();
+    need(sha256_text(digest) && sha256_text(pin) && descriptor.at("file") == "android/" + name,
+         "machine vbmeta digest and boot parameters required");
+    check_file(seed / "android" / name, pin, 4096);
+    const auto parameters = machine_preparation_detail::text(seed / "android" / name, 4096);
+    need(android_verified_boot_digest(parameters) == digest,
+         "machine boot parameters differ from their vbmeta digest");
+    std::string stock = parameters;
 
-        return expected;
-    };
-
-    for (const auto *name : {"system.img", "vendor.img"}) {
-        const auto pin = verify_role(name, android.at("images").at(name));
-        check_file(seed / "android" / name, pin);
-        need(!std::filesystem::exists(std::filesystem::symlink_status(
-                     seed / "android" / (std::string(name) + ".qcow2"))),
-             "signed Android cannot use unverified system/vendor overlays");
+    for (auto at = stock.find(digest); at != std::string::npos; at = stock.find(digest, at)) {
+        stock.replace(at, digest.size(), clean.vbmeta_digest);
     }
 
-    for (auto &[name, pin] : pins) {
-        const auto expected = verify_role(name, android.at("boot_files").at(name));
-        need(name == "VerifiedBootParams.textproto" || pin == expected,
-             "ordinary SDK boot file differs from the source archive");
-        check_file(seed / "android" / name, expected, 64ULL << 20);
-        pin = expected;
-    }
-
-    const auto metadata =
-            machine_preparation_detail::text(seed / "android/VerifiedBootParams.textproto", 4096);
-    const auto digest = proof.at("vbmeta_digest").get<std::string>();
-    need(metadata.find("\nparam: \"androidboot.vbmeta.digest=" + digest + "\"\n") !=
-                 std::string::npos,
-         "portable Android boot digest differs");
+    need(sha256_bytes(stock) == pins.at(name),
+         "machine boot parameters differ from the stock ones beyond the vbmeta digest");
+    const auto chain = android_vbmeta_chain(raw_disk_reader(seed / "android/system.img"),
+                                            android_vbmeta_partitions(definition.at("android")));
+    need(chain.digest == digest, "machine vbmeta digest differs from its system image");
+    pins[name] = pin;
 
     return pins;
 }
@@ -978,8 +849,6 @@ Json build_android_candidate(const std::filesystem::path &root,
     need(sha256_bytes(profile_bytes) == request.profile_sha256,
          "authoring profile changed while reading candidate inputs");
     const auto profile = portable_profile_json(profile_bytes);
-    const bool signed_system = !request.signed_sdk.empty();
-    need(signed_system == !request.signed_release.is_null(), "complete verified release required");
 
     if (original_navi_requested(profile)) {
         original_navi_preflight(profile, android_candidate_api(profile));
@@ -1110,6 +979,16 @@ Json build_android_candidate(const std::filesystem::path &root,
         }
     }
 
+    // The Native Bridge files live in the same system overlay.
+    if (!request.native_bridge.empty()) {
+        for (const auto &[path, pin] : request.native_bridge_descriptor.at("files").items()) {
+            (void)pin;
+            system_payload =
+                    checked_add(system_payload,
+                                std::filesystem::file_size(request.native_bridge / path.substr(1)));
+        }
+    }
+
     const auto peak_extra_total = android_candidate_peak_extra_bytes(
             profile, base_bytes_total, system_payload, request.profile);
     need(peak_extra >= peak_extra_total,
@@ -1120,12 +999,25 @@ Json build_android_candidate(const std::filesystem::path &root,
                                           : portable_development_kernel_file(root, development);
     const auto development_sha =
             development.is_null() ? std::string{} : development.at("sha256").get<std::string>();
-    need(!signed_system || development.is_null(), "signed Android supplies its own pinned kernel");
-    const auto &base_files = signed_system ? request.signed_release.at("files") : clean.at("files");
-    prepare_android_candidate_base(signed_system ? request.signed_sdk : request.clean_base,
-                                   base_files, destination, reserve, peak_extra, {},
-                                   development_file, development_sha);
-    candidate.signed_system = signed_system;
+    prepare_android_candidate_base(request.clean_base, clean.at("files"), destination, reserve,
+                                   peak_extra, {}, development_file, development_sha);
+    const auto clean_base = native_clean_base(profile.at("android"));
+
+    // The stock system image and boot parameters must declare the same vbmeta chain.
+    if (!clean_base.vbmeta_digest.empty()) {
+        const auto parameters = candidate.machine / "base/VerifiedBootParams.textproto";
+        candidate.stock_boot_parameters = text(parameters, 4096);
+        candidate.stock_vbmeta_digest = clean_base.vbmeta_digest;
+        candidate.vbmeta_partitions = android_vbmeta_partitions(profile.at("android"));
+        const auto stock =
+                android_vbmeta_chain(raw_disk_reader(candidate.machine / "base/system.img"),
+                                     candidate.vbmeta_partitions);
+        need(stock.digest == clean_base.vbmeta_digest &&
+                     android_verified_boot_digest(candidate.stock_boot_parameters) == stock.digest,
+             "stock vbmeta chain differs from the Android base pin");
+        candidate.vbmeta_digest = stock.digest;
+    }
+
     const auto owner = random_token();
     write_private_json(
             destination / ".owner.json",
@@ -1133,35 +1025,8 @@ Json build_android_candidate(const std::filesystem::path &root,
     Json checks = Json::array();
     std::string verification_boot_id;
     unsigned verification_boots = 0;
-    std::string first_signed_boot;
-    const auto signed_boot_check = [&](const std::string &label) {
-        candidate.root_adbd();
-        const auto &proof = request.signed_release;
-        record_cold_check(checks, label + ":vbmeta",
-                          candidate.shell({"getprop", "ro.boot.vbmeta.digest"}),
-                          proof.at("vbmeta_digest").get<std::string>());
-        const auto table = candidate.shell({"dmctl", "table", "system-verity"});
-        const auto status = candidate.shell({"dmctl", "status", "system-verity"});
-        const auto mounts = candidate.shell({"cat", "/proc/mounts"});
-        const auto signed_root = proof.at("system_root_sha256").get<std::string>();
-        const bool matched = table.find(" sha256 " + signed_root + " ") != std::string::npos;
-        const bool verified = status.ends_with("verity, V");
-        const std::regex mounted(R"((?:^|\n)/dev/block/(dm-\d+) (?:/|/system) ext4 ro(?:,\S*)? )");
-        std::smatch system_device;
-        const bool readonly = std::regex_search(mounts, system_device, mounted) &&
-                              candidate.shell({"cat", "/sys/class/block/" + system_device[1].str() +
-                                                              "/dm/name"}) == "system-verity";
-        record_cold_check(checks, label + ":dm-verity-root", matched ? signed_root : table,
-                          signed_root);
-        record_cold_check(checks, label + ":dm-verity-status", verified ? "V" : status, "V");
-        record_cold_check(checks, label + ":readonly-mount", readonly ? "ro" : "other", "ro");
-
-        return candidate.shell({"cat", "/proc/sys/kernel/random/boot_id"});
-    };
     try {
-        const auto scratch_bytes =
-                signed_system ? 0
-                              : android_candidate_overlay_scratch_bytes(profile, system_payload);
+        const auto scratch_bytes = android_candidate_overlay_scratch_bytes(profile, system_payload);
 
         if (scratch_bytes) {
             const auto source_pin =
@@ -1191,10 +1056,8 @@ Json build_android_candidate(const std::filesystem::path &root,
                                         {"original_payloads_unchanged", true}});
         }
 
-        if (!signed_system) {
-            base_features(candidate.machine / "base/advancedFeatures.ini",
-                          profile.at("android").value("features", Json::object()));
-        }
+        base_features(candidate.machine / "base/advancedFeatures.ini",
+                      profile.at("android").value("features", Json::object()));
 
         write(candidate.machine / "config.ini",
               avd_config(profile, candidate.machine / "base", "voyemu-candidate"));
@@ -1202,30 +1065,16 @@ Json build_android_candidate(const std::filesystem::path &root,
         candidate.phase("system-install");
         std::vector<Installed> installed;
 
-        if (signed_system) {
-            first_signed_boot = signed_boot_check("signed-first-boot");
+        if (!plan.at("system").empty() || !request.native_bridge.empty()) {
+            candidate.writable();
 
-            for (const auto &entry : plan.at("system")) {
-                const auto artifact_name = entry.at("artifact").get<std::string>();
-                const auto &source = artifacts.at(artifact_name);
-                need(entry.at("type") == "file" && source.contains("file") &&
-                             !entry.value("mutable", false),
-                     "signed system requires immutable file entries");
-                const auto target = entry.at("target").get<std::string>();
-                const auto selected = request.signed_system_selections.find(target);
-                const auto expected = selected == request.signed_system_selections.end()
-                                              ? source.at("sha256").get<std::string>()
-                                              : selected->second;
-                installed.push_back({artifact_name, target, expected,
-                                     entry.value("package", std::string{}),
-                                     entry.value("mode", std::string("0644")), false});
+            if (!request.native_bridge.empty()) {
+                candidate.phase("native-bridge");
+                install_native_bridge(candidate,
+                                      {request.native_bridge_descriptor, request.native_bridge},
+                                      installed);
             }
 
-            candidate.events.push_back(
-                    {{"phase", "signed-system-staged-offline"},
-                     {"vbmeta_digest", request.signed_release.at("vbmeta_digest")}});
-        } else if (!plan.at("system").empty()) {
-            candidate.writable();
             // The system image grows by the bytes of the system entries.
             std::optional<progress::Meter> building;
 
@@ -1450,7 +1299,7 @@ Json build_android_candidate(const std::filesystem::path &root,
             need(flushed == "Current settings written.", "original Navi AppOps flush: " + flushed);
         }
 
-        if ((signed_system || plan.at("system").empty()) && !early_data.empty()) {
+        if (plan.at("system").empty() && request.native_bridge.empty() && !early_data.empty()) {
             candidate.root_adbd();
             install_entries(candidate, early_data, artifacts, aapt2, installed);
         }
@@ -1608,17 +1457,24 @@ Json build_android_candidate(const std::filesystem::path &root,
         verify_a9_precompiled_policy(candidate, profile);
 
         candidate.root_adbd();
-        verification_boot_id =
-                signed_system ? signed_boot_check("signed-cold")
-                              : candidate.shell({"cat", "/proc/sys/kernel/random/boot_id"});
+        verification_boot_id = candidate.shell({"cat", "/proc/sys/kernel/random/boot_id"});
 
-        if (signed_system) {
-            need(!first_signed_boot.empty() && first_signed_boot != verification_boot_id,
-                 "second signed boot requires a new kernel boot ID");
+        // The cold guest boots with the vbmeta digest of the machine; dm-verity stays disabled
+        // since the first remount, which leaves the verified boot state orange.
+        if (!candidate.stock_vbmeta_digest.empty()) {
+            record_cold_check(checks, "vbmeta-digest",
+                              candidate.shell({"getprop", "ro.boot.vbmeta.digest"}),
+                              candidate.vbmeta_digest);
         }
 
         verification_boots = candidate.boots;
         verify_cold(candidate, profile, installed, checks);
+
+        if (!request.native_bridge.empty()) {
+            verify_cold_native_bridge(
+                    candidate, {request.native_bridge_descriptor, request.native_bridge}, checks);
+        }
+
         Json frames = Json::array();
 
         if (request.capture_frames) {
@@ -1629,13 +1485,6 @@ Json build_android_candidate(const std::filesystem::path &root,
         candidate.stop();
         candidate.phase("portable-export");
         const auto images = export_images(candidate, destination, reserve);
-
-        if (signed_system) {
-            for (const auto *name : {"system.img", "vendor.img"}) {
-                need(images.at(name).at("sha256") == base_files.at(name).at("sha256"),
-                     "exported signed disk differs from the verified release");
-            }
-        }
 
         if (!development.is_null()) {
             check_file(development_file, development_sha, 64ULL << 20);
@@ -1709,14 +1558,19 @@ Json build_android_candidate(const std::filesystem::path &root,
             receipt["target"] = profile_target_identity(profile);
         }
 
-        if (signed_system) {
-            receipt["signed_android"] = request.signed_release;
-            receipt["signed_android"]["first_boot_id"] = first_signed_boot;
-            receipt["signed_android"]["cold_boot_id"] = verification_boot_id;
+        if (!candidate.stock_vbmeta_digest.empty()) {
             const std::string name = "VerifiedBootParams.textproto";
-            copy_portable_image(candidate.machine / "base" / name,
-                                base_files.at(name).at("sha256").get<std::string>(),
-                                destination / "android" / name, reserve);
+            const auto parameters = candidate.machine / "base" / name;
+            const auto pin = sha256_file(parameters);
+            need(android_verified_boot_digest(text(parameters, 4096)) == candidate.vbmeta_digest &&
+                         android_vbmeta_chain(raw_disk_reader(destination / "android/system.img"),
+                                              candidate.vbmeta_partitions)
+                                         .digest == candidate.vbmeta_digest,
+                 "exported system image differs from the machine vbmeta digest");
+            copy_portable_image(parameters, pin, destination / "android" / name, reserve);
+            receipt["android"]["verified_boot"] = {{"vbmeta_digest", candidate.vbmeta_digest},
+                                                   {"file", "android/" + name},
+                                                   {"sha256", pin}};
         }
 
         if (!development.is_null()) {

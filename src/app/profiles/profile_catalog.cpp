@@ -45,7 +45,8 @@ bool only_fields(const Json &object, std::initializer_list<std::string_view> fie
 
 // Each build target declares its guest ABI and preparation; androidBase replaces the Android base
 // of the profile with a pinned one of profiles/common/android-bases, developmentKernel the kernel
-// of its ABI, and emulator adds settings. The OEM import and recipes stay those of the profile.
+// of its ABI or null for the stock kernel of its base, and emulator adds settings. The OEM import
+// and recipes stay those of the profile.
 Json resolve_target(Json definition, std::string_view name,
                     const std::function<Json(const std::string &)> &read_base) {
     const Check need{"PROFILE_TARGET"};
@@ -59,8 +60,7 @@ Json resolve_target(Json definition, std::string_view name,
          "unknown build target field");
     const auto abi = entry.value("guestAbi", std::string{}),
                preparation = entry.value("preparation", std::string{});
-    need((abi == "arm64-v8a" || abi == "x86_64") &&
-                 (preparation == "sdk" || preparation == "signed-offline"),
+    need((abi == "arm64-v8a" || abi == "x86_64") && preparation == "sdk",
          "build target requires a supported guest ABI and preparation");
     Json target = {{"name", name}, {"guestAbi", abi}, {"preparation", preparation}};
     // A development kernel boots one ABI; a target of another ABI never falls back to the stock
@@ -241,15 +241,6 @@ Json profile_target_identity(const Json &definition) {
     return {{"name", target.at("name")},
             {"abi", target.at("guestAbi")},
             {"base_sha256", definition.at("android").at("sha256")}};
-}
-
-bool profile_signed_preparation(const Json &definition) {
-    return definition.value("target", Json::object()).value("preparation", std::string{}) ==
-           "signed-offline";
-}
-
-bool profile_multimedia_only(const Json &definition) {
-    return profile_signed_preparation(definition);
 }
 
 const Json &embedded_profile_catalog() {

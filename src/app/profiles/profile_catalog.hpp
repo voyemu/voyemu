@@ -30,10 +30,6 @@ ProfileTargetSelection select_profile_target(const Json &definition, std::string
 std::string profile_target_machine_name(std::string_view profile,
                                         const ProfileTargetSelection &selection);
 Json profile_target_identity(const Json &definition);
-// Whether the resolved build target prepares a signed system offline.
-bool profile_signed_preparation(const Json &definition);
-// A target prepared offline has no cluster yet.
-bool profile_multimedia_only(const Json &definition);
 // The authoring directory profiles/PROFILE of a valid profile id.
 std::filesystem::path authoring_directory(const std::filesystem::path &root,
                                           std::string_view profile);

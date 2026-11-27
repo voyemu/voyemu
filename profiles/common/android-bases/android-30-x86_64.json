@@ -5,6 +5,7 @@
   "sha256": "8d591034a4244a920d7a3ec274bb1734dd6474a3d8c11d0fce902010db3a13aa",
   "clean_base": {
     "receipt_sha256": "e6acb711775eb47c0ed9dfee792cb830a2dd99b7ebcda8fec4c973c5e448196d",
+    "vbmeta_digest": "aa516f360594014de86105695b13f1df5e00b81539011aafdd58e68e859134a1",
     "boot_files": {
       "VerifiedBootParams.textproto": "9dbc7febf80ef421f1d80d939e8b89ce84d6a06ae04289664cd46bb4295ad903",
       "advancedFeatures.ini": "a00d90a17e68a18c581a8e5675d86d079806293690c7bff3d571df15d6c3350d",
@@ -32,6 +33,7 @@
       "/system/etc/selinux/mapping/30.0.cil": "c14ab911584595a94e6783600371fed23cec1d56b8001383584a3192d028eb60"
     }
   },
+  "native_bridge": "android-30-x86_64",
   "features": {
     "MultiDisplay": "on"
   }

@@ -1,196 +1,15 @@
 #include "java_toolchain.hpp"
+#include "native_bridge.hpp"
 #include "ordinary_path.hpp"
 #include "profile_build_internal.hpp"
 #include "profile_catalog.hpp"
 #include "qnx_guest_build.hpp"
-#include "signed_android.hpp"
 
 namespace voyemu {
 using namespace profile_build_detail;
 namespace {
 // A consumer of a build generation directory holds this file shared; release takes it exclusively.
 constexpr const char *build_output_lock = "build-output.lock";
-
-std::filesystem::path signed_filesystem_recipe(const std::filesystem::path &root,
-                                               std::string_view profile, const Json &definition) {
-    if (!profile_multimedia_only(definition)) {
-        return {};
-    }
-
-    const auto file = authoring_directory(root, profile) / "targets" /
-                      definition.at("target").at("name").get<std::string>() / "filesystems.json";
-    ordinary(file);
-    need(std::filesystem::is_regular_file(file), "offline filesystem recipe is missing");
-
-    return file;
-}
-
-struct SignedImageBuild {
-    std::filesystem::path stage, filesystems, release, key;
-
-    ~SignedImageBuild() {
-        if (!stage.empty()) {
-            std::error_code ignored;
-            std::filesystem::remove_all(stage, ignored);
-        }
-    }
-};
-
-std::string run_signed_image_tool(const std::filesystem::path &directory,
-                                  const std::filesystem::path &tool,
-                                  std::vector<std::string> arguments, int timeout_ms,
-                                  bool offline = false) {
-    ProcessSpec command;
-
-    command.executable = tool;
-    command.directory = directory;
-    command.arguments = std::move(arguments);
-
-    if (offline) {
-        command.environment["VOYEMU_AVD_OFFLINE"] = "1";
-    }
-
-    const auto result = execute(command, timeout_ms, 128 * 1024);
-
-    if (result.exit_code != 0 || result.timed_out) {
-        throw VoyemuError("SIGNED_ANDROID", tool.filename().string() + ": " + result.output);
-    }
-
-    return result.output;
-}
-
-void build_signed_profile_image(const std::filesystem::path &root, std::string_view profile,
-                                const Json &definition,
-                                const ProfilePreparationArtifacts &artifacts, bool offline,
-                                SignedImageBuild &build) {
-    if (!os::host_signed_android_preparation) {
-        throw VoyemuError("SIGNED_ANDROID", "signed Android preparation requires Linux");
-    }
-
-    const auto recipes = signed_filesystem_recipe(root, profile, definition).parent_path();
-    const auto bridge = recipes / "native-bridge.json";
-    const auto filesystem_recipe = read_private_json(recipes / "filesystems.json", 128 * 1024);
-    const auto display_id = filesystem_recipe.find("buildDisplayId");
-    need(display_id == filesystem_recipe.end() || display_id->is_string(),
-         "buildDisplayId must be a string");
-    const auto &selection = definition.at("target");
-    const auto base_name = selection.at("androidBase").get<std::string>();
-    need(valid_profile_name(base_name) && android_guest_abi(definition) == "x86_64",
-         "offline Android image requires a target with a registered x86_64 SDK base");
-    const auto base = root / "profiles/common/android-bases" / (base_name + ".json");
-    const auto scripts = signed_android_tools(root);
-    const auto job = root / ".local/build/jobs" / ("signed-android-" + random_token());
-    ensure_private_directory(job.parent_path());
-    need(std::filesystem::create_directory(job), "fresh signed Android stage required");
-    build.stage = job;
-    ensure_private_directory(job);
-    const auto tool = [&](const char *script, std::vector<std::string> arguments) {
-        return run_signed_image_tool(job, scripts / script, std::move(arguments), 600000, offline);
-    };
-    const auto input_receipt = artifacts.transport / "profile-artifacts.json";
-    auto filesystems = job / "filesystems";
-    tool("build-filesystems.sh",
-         {std::string(profile), input_receipt.string(), hash(input_receipt, 1 << 20),
-          filesystems.string(), selection.at("name").get<std::string>()});
-
-    if (std::filesystem::exists(std::filesystem::symlink_status(bridge))) {
-        ordinary(bridge);
-        const auto recipe = read_private_json(bridge, 256 * 1024);
-        const auto &archive = recipe.at("archive");
-        const auto donor = download_pinned({archive.at("url").get<std::string>(),
-                                            archive.at("sha256").get<std::string>(),
-                                            2ULL << 30,
-                                            DownloadEncoding::raw,
-                                            std::string("Android Native Bridge SDK"),
-                                            {},
-                                            {},
-                                            false},
-                                           root / ".local/toolchains/downloads/native", offline,
-                                           android_candidate_reserve_bytes(definition, profile));
-        const auto bridged = job / "native-bridge-filesystems";
-        tool("apply-native-bridge.sh",
-             {bridge.string(), donor.file.string(), filesystems.string(), bridged.string()});
-        filesystems = bridged;
-    }
-
-    const auto authority = root / ".local/toolchains/avd-image-tools";
-    const auto signing = authority / "local-development-signer";
-    const auto priv = signing / "private.pem";
-    ensure_private_directory(authority);
-    os::FileLock key_lock(authority / "signer.lock", true);
-    need(key_lock.held(), "local Android signing authority is in use");
-
-    if (!std::filesystem::exists(signing)) {
-        const auto fresh = job / "signer";
-        ensure_private_directory(fresh);
-        const auto private_file = fresh / "private.pem";
-        run_signed_image_tool(job, "/usr/bin/openssl",
-                              {"genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:4096",
-                               "-out", private_file.string()},
-                              60000);
-        std::filesystem::permissions(private_file, std::filesystem::perms::owner_read |
-                                                           std::filesystem::perms::owner_write);
-        publish(fresh, signing);
-    }
-
-    const auto release = job / "release";
-    std::vector<std::string> image_args{base.string(),        artifacts.base.string(),
-                                        filesystems.string(), std::string(profile),
-                                        priv.string(),        release.string()};
-
-    if (display_id != filesystem_recipe.end()) {
-        image_args.push_back(display_id->get<std::string>());
-    }
-
-    tool("build-image.sh", std::move(image_args));
-    build.filesystems = filesystems;
-    build.release = release;
-    build.key = priv;
-}
-
-std::map<std::string, std::string>
-signed_system_selections(const std::filesystem::path &definition_file,
-                         const std::filesystem::path &filesystems) {
-    const auto recipe = read_private_json(definition_file, 128 * 1024);
-    std::map<std::string, std::string> accepted;
-    const auto log = filesystems / "evidence/install.tsv";
-
-    ordinary(log);
-    const auto size = std::filesystem::file_size(log);
-    need(size > 0 && size <= 512 * 1024, "bounded offline system selections required");
-    std::ifstream input(log);
-
-    for (std::string line; std::getline(input, line);) {
-        std::istringstream fields(line);
-        std::string partition, path, policy, digest;
-        need(std::getline(fields, partition, '\t') && std::getline(fields, path, '\t') &&
-                     std::getline(fields, policy, '\t') && std::getline(fields, digest, '\t') &&
-                     sha256_text(digest),
-             "offline selection fields differ");
-        const auto target = partition == "system" ? path : "/" + partition + path;
-
-        if (policy.starts_with("keep-sdk-")) {
-            const auto &preserved = recipe.at("keepSdkFiles");
-
-            for (const auto &name : {target, "/system" + target}) {
-                if (preserved.contains(name) && preserved.at(name).at("selection") == policy) {
-                    need(accepted.emplace(name, digest).second, "duplicate SDK selection");
-                }
-            }
-        } else if (policy == "keep-platform-elf") {
-            const auto &files = recipe.at("keepPlatformElf");
-            need(std::find(files.begin(), files.end(), Json(target)) != files.end() &&
-                         accepted.emplace(target, digest).second,
-                 "undeclared or duplicate platform ELF selection");
-        } else if (policy == "merge-usb-rule") {
-            need(recipe.at("mergeFstab").at("target") == target &&
-                         accepted.emplace(target, digest).second,
-                 "undeclared or duplicate fstab selection");
-        }
-    }
-
-    return accepted;
-}
 
 // Cold candidates keep their origin across invocations; a live file lock alone cannot protect
 // those consumers. Published candidates have finished consuming their artifact generation.
@@ -524,17 +343,17 @@ Json export_portable_boot_files(const std::filesystem::path &root, const Json &d
             input = portable_development_kernel_file(root, development);
         }
 
-        const bool signed_metadata = !verified_boot_parameters.empty() &&
-                                     name == "VerifiedBootParams.textproto";
+        const bool machine_parameters = !verified_boot_parameters.empty() &&
+                                        name == "VerifiedBootParams.textproto";
 
-        if (signed_metadata) {
+        if (machine_parameters) {
             input = verified_boot_parameters;
         }
 
         const auto pin = hash(input, 64ULL << 20);
 
-        if (signed_metadata) {
-            need(pin == verified_boot_sha256, "signed Android boot metadata changed");
+        if (machine_parameters) {
+            need(pin == verified_boot_sha256, "candidate boot parameters changed");
         }
 
         if (!development.is_null() && name == "kernel-ranchu") {
@@ -1098,18 +917,6 @@ Json build_profile(const std::filesystem::path &root, std::string_view profile,
     root_profile(root, profile);
 
     const auto definition = authoring_profile(root, profile, selected);
-
-    if (!signed_filesystem_recipe(root, profile, definition).empty()) {
-        need(!cluster && multimedia && reuse_qnx.empty() &&
-                     !std::filesystem::exists(build_target(root, profile, machine)),
-             "signed Android requires a fresh multimedia-only machine");
-    }
-
-    if (profile_multimedia_only(definition)) {
-        need(!cluster && multimedia && reuse_qnx.empty(),
-             "selected target supports multimedia only");
-    }
-
     const auto jdk = profile_preparation_jdk(
             root, requested_jdk, embedded_toolchain_manifest().at("javaHelper"), !selected.empty());
 
@@ -1304,16 +1111,7 @@ Json build_profile_android(const std::filesystem::path &root, std::string_view p
                            const std::string &artifact_receipt_pin, std::string_view selected) {
     root_profile(root, profile);
     const auto definition = authoring_profile(root, profile, selected);
-    const auto offline_recipe = signed_filesystem_recipe(root, profile, definition);
     const auto target = build_target(root, profile, machine);
-
-    if (!offline_recipe.empty() &&
-        std::filesystem::exists(std::filesystem::symlink_status(target))) {
-        throw VoyemuError("SIGNED_ANDROID", "signed Android requires a fresh machine destination");
-    }
-
-    Json signed_release;
-    SignedImageBuild signed_build;
 
     if (std::filesystem::is_symlink(target) ||
         (std::filesystem::exists(target) && !profile_feature(definition, "system_upgrade"))) {
@@ -1369,12 +1167,14 @@ Json build_profile_android(const std::filesystem::path &root, std::string_view p
                                 hash(artifacts.transport / "profile-artifacts.json", 1 << 20));
     }
 
-    if (!offline_recipe.empty()) {
-        build_signed_profile_image(root, profile, definition, artifacts, offline, signed_build);
-        signed_release = verify_signed_android_release(root, signed_build.release, signed_build.key,
-                                                       definition);
-    }
-
+    // The x86_64 guest of an Android base with a Native Bridge runs the ARM code of the profile.
+    const auto bridge_descriptor = native_bridge_descriptor(root, definition);
+    const auto bridge =
+            bridge_descriptor.is_null()
+                    ? NativeBridge{}
+                    : prepare_native_bridge(root, bridge_descriptor,
+                                            root / ".local/toolchains/downloads/native", offline,
+                                            android_candidate_reserve_bytes(definition, profile));
     phase.done();
     AndroidCandidateRequest request;
     request.profile = profile;
@@ -1390,11 +1190,9 @@ Json build_profile_android(const std::filesystem::path &root, std::string_view p
 
     request.tool_pins = host_pins(artifacts.sdk, definition);
 
-    if (!signed_release.is_null()) {
-        request.signed_release = signed_release;
-        request.signed_sdk = signed_build.release / "sdk";
-        request.signed_system_selections = signed_system_selections(offline_recipe,
-                                                                    signed_build.filesystems);
+    if (!bridge_descriptor.is_null()) {
+        request.native_bridge = bridge.directory;
+        request.native_bridge_descriptor = bridge_descriptor;
     }
 
     // A profile may pin the port of its source candidate in emulator.candidatePort.
@@ -1420,6 +1218,12 @@ Json build_profile_android(const std::filesystem::path &root, std::string_view p
     if (native_base_api(definition.at("android")) == 30) {
         request.overall_timeout_ms = 600000;
         request.capture_frames = true;
+    }
+
+    // The donated files, their checks and the boot image of the second x86 instruction set take
+    // their own time.
+    if (!request.native_bridge.empty()) {
+        request.overall_timeout_ms += 300000;
     }
 
     if (record_declares(definition, ProfilePlatform::qinggan09, ProfileBoard::nxp)) {
@@ -1479,14 +1283,10 @@ Json build_profile_android(const std::filesystem::path &root, std::string_view p
             }
         }
 
-        if (!request.signed_release.is_null()) {
-            base_bytes = 0;
-
-            for (const auto &file : request.signed_release.at("files")) {
-                const auto bytes = file.at("bytes").get<std::uint64_t>();
-                need(bytes <= 8ULL << 30 && base_bytes <= (8ULL << 30) - bytes,
-                     "bounded signed base extent required");
-                base_bytes += bytes;
+        if (!request.native_bridge.empty()) {
+            for (const auto &[path, pin] : request.native_bridge_descriptor.at("files").items()) {
+                (void)pin;
+                add_payload(request.native_bridge / path.substr(1));
             }
         }
 

@@ -9,7 +9,7 @@ The profile declares two [build targets](../how/profiles-machines.md#build-targe
 | Target | Android ABI | Emulator | Cluster |
 | --- | --- | --- | --- |
 | `arm` | `arm64-v8a` | 2048 MiB, 4 cores | QNX, experimental |
-| `x86` | `x86_64` | 4096 MiB, 4 cores | None |
+| `x86` | `x86_64` | 4096 MiB, 4 cores | QNX, experimental |
 
 Both targets use API 30 and the `passion-2024` steering wheel.
 
@@ -19,13 +19,11 @@ The `x86` target runs the multimedia in an x86_64 guest: with hardware accelerat
 
 Android plays sound through the host audio output, see [audio](../how/launch.md#audio). The firmware sets playback volume to its minimum at cold boot, and the normal volume controls raise it.
 
-The build uses API 30 `default` x86_64 r11. A normal reboot of r11 succeeds. After the standard Android remount, Android Verified Boot rejects the changed boot metadata on restart before preparation copies the first OEM file. The target assembles the system files before generating integrity trees and signing the images with a local development key. It uses the pinned ARM Native Bridge files from Google APIs r16 because `MonzaCarService` needs its ARM64 JNI library to register the service that both OEM home screens use. See [preparation](../how/preparation.md#build) and [profiles as sources, machines as results](../why/profiles-machines.md).
-
-Before signing the system image, the profile sets `ro.build.display.id` to `V2.1.4.80-20260403174306` from the H53 firmware. Android makes this ID available through `Build.DISPLAY`.
+The target uses API 30 `default` x86_64 r11 and prepares it like the `arm` target on its running guest. The first-stage mount of r11 verifies the vbmeta chain, so the machine boots with its own boot parameters, and dm-verity stays off; see [preparation](../how/preparation.md#build). The ARM code of the firmware runs through the pinned Native Bridge from Google APIs r16: `MonzaCarService` needs its ARM64 JNI library to register the service that both OEM home screens use. See [profiles as sources, machines as results](../why/profiles-machines.md).
 
 ### Prepare and run
 
-[Build the launcher from source](../dev/build.md) with the pinned Linux build tools, including JDK 25. Run the commands from the checkout root in a hardware-accelerated graphical session with access to `/dev/kvm` and the GPU render device. The SDK Emulator needs the Qt/X11 runtime libraries, including `libxkbfile.so.1`, `libSM.so.6` and `libICE.so.6`. Image preparation uses e2fsprogs, binutils, `jq`, `unzip` and the `openssl` command. Preparation downloads pinned tools with `curl`, extracts them with `dpkg-deb` and runs `avbtool` on Python 3.
+[Build the launcher from source](../dev/build.md) with the pinned Linux build tools, including JDK 25. Run the commands from the checkout root in a hardware-accelerated graphical session with access to `/dev/kvm` and the GPU render device. The SDK Emulator needs the Qt/X11 runtime libraries, including `libxkbfile.so.1`, `libSM.so.6` and `libICE.so.6`.
 
 Use the local path to `OIB_8155_H53Y3632802AW.zip`. Both `deps` and `build` use the developer JDK for the [Java preparation helper](../dev/ci.md#the-java-helper-workflow) until an archive with support for build targets is pinned. On an x86_64 host `x86` is the default target, and the machine goes to `machines/PROFILE`.
 
@@ -64,7 +62,7 @@ The `arm` target follows the [common preparation steps](../how/preparation.md). 
 
 ## Notes
 
-On the `arm` target, a multimedia-only `build --force` into an existing stopped machine updates its Android system and keeps the writable disks. A signed `x86` build uses a new machine directory. See [preparation](../how/preparation.md).
+A multimedia-only `build --force` into an existing stopped machine updates its Android system and keeps the writable disks. See [preparation](../how/preparation.md).
 
 The application list shows the nine tiles of the vehicle in its order: Vehicle, Bluetooth Phone, Scenes, 360 View, Drive Recorder, Camera, Photos, Music and Video. Each tile opens the OEM application of the firmware: `com.voyah.scenemode` for Scenes, `com.mega.dvr` for Drive Recorder and `com.voyah.gallery` for Photos among them. Photos and Scenes run with the system rights they have in the vehicle, so Photos reads the photos and videos of the internal storage and of the USB drives. Drive Recorder shows the virtual camera, see [Passion Drive Recorder](../how/camera.md#passion-drive-recorder).
 

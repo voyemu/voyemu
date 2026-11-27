@@ -31,7 +31,7 @@ The guard is the exact original bytes: each OEM input is pinned by SHA-256 in `p
 
 After recipes, three sections of `profile.json` finish the guest:
 
-- `install` places artifacts into the guest image: OEM originals, patched files, components and pinned `files/` entries, each with a target path and mode.
+- `install` places artifacts into the guest image: OEM originals, patched files, components and pinned `files/` entries, each with a target path and mode. A file with `merge` set to `lines` keeps the file of the Android base and adds each line of its source that the file lacks, such as one mount rule in the fstab of the base.
 - `configure` sets boot properties, Android settings, the home activity and the services that start with the guest.
 - `verify` lists the services, activities and home priorities that a verification boot must observe before `runtime.json` is written.
 

@@ -16,7 +16,7 @@ A profile describes OEM inputs, recipes, components and pins for one firmware. A
 
 ## Argument
 
-The SDK archive digest identifies the files supplied by Google. A signed Android system image is bound the same way: the machine manifest pins its disks, its boot files and the vbmeta digest of its boot parameters by SHA-256, and `check` and `start` verify them on any host. Inside Android, the guest compares the vbmeta digest with its boot parameters, and dm-verity checks blocks as the guest reads the system partition.
+The SDK archive digest identifies the files supplied by Google. A machine on a base whose first-stage mount verifies vbmeta is bound the same way: the machine manifest pins its disks and its boot parameters by SHA-256, and `check` and `start` compare the vbmeta digest of these parameters with the vbmeta chain of its system image on any host. Inside Android, the guest compares the same digest at the first-stage mount; dm-verity is off in a prepared machine, so the guest does not check the blocks of the system partition as it reads them.
 
 One copy of the source removes the question of which profile is current. Embedding everything a launch needs makes the machine self-contained: after a clean stop, copying the whole directory is enough to move it. The profile identity in the machine manifest still tells which profile it came from.
 

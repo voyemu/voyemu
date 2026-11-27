@@ -1,9 +1,9 @@
+#include "android_boot_pins.hpp"
 #include "android_java.hpp"
 #include "portable_fonts.hpp"
 #include "profile_build_internal.hpp"
 #include "profile_catalog.hpp"
 #include "project_files.hpp"
-#include "signed_android.hpp"
 
 // Upgrades, finalizes and activates built profiles and their frontend and UI observer bindings.
 namespace voyemu {
@@ -505,14 +505,16 @@ static void export_android_machine_parts(
 
     const auto reserve = android_candidate_reserve_bytes(definition, profile);
 
-    if (candidate.contains("signed_android")) {
-        const auto &proof = candidate.at("signed_android");
-        const std::string metadata = "VerifiedBootParams.textproto";
+    // A base that binds a vbmeta digest boots with the boot parameters of the candidate.
+    if (const auto &guest = candidate.at("android"); guest.contains("verified_boot")) {
+        const auto &verified = guest.at("verified_boot");
+        need(verified.at("file") == "android/VerifiedBootParams.textproto",
+             "candidate boot parameters path differs");
         runtime["android"]["boot_files"] = export_portable_boot_files(
-                root, definition, stage, reserve, android / "android" / metadata,
-                proof.at("files").at(metadata).at("sha256").get<std::string>());
-        runtime["android"]["signed_android"] = proof;
-        (void)checked_signed_android_boot_pins(stage, definition, runtime);
+                root, definition, stage, reserve, android / verified.at("file").get<std::string>(),
+                verified.at("sha256").get<std::string>());
+        runtime["android"]["vbmeta_digest"] = verified.at("vbmeta_digest");
+        (void)checked_android_boot_pins(stage, definition, runtime);
     } else {
         runtime["android"]["boot_files"] = export_portable_boot_files(root, definition, stage,
                                                                       reserve);
@@ -562,7 +564,6 @@ Json finalize_profile_build(const std::filesystem::path &root, std::string_view 
     }
 
     const auto definition = authoring_profile(root, profile, selected);
-    need(!profile_multimedia_only(definition), "selected target supports multimedia only");
     validate_android_candidate(android, candidate, profile, definition);
     const auto profile_pin = candidate.at("profile_sha256").get<std::string>();
     const auto reused_qnx = reuse_qnx ? validate_accepted_qnx_reuse(root, profile, qnx_file,

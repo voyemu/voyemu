@@ -156,7 +156,7 @@ if(VOYEMU_LINUX)
 endif()
 target_compile_options(voyemu_core PRIVATE -Wall -Wextra -Wpedantic)
 # Archive preparation must not add dependencies to the window/graphics runtime.
-add_library(voyemu_zip STATIC qnx/qnx_update.cpp qnx/qnx_update_import.cpp cli/vehicle_capture.cpp profiles/profile_build.cpp profiles/profile_build_validate.cpp profiles/profile_build_finalize.cpp profiles/portable_fonts.cpp profiles/profile_preparation.cpp profiles/machine_preparation.cpp profiles/machine_preparation_candidate.cpp profiles/machine_preparation_verify.cpp profiles/machine_preparation_build.cpp prepare/java_toolchain.cpp prepare/java_toolchain_identity_${voyemu_host_backend}.cpp prepare/java_runtime.cpp prepare/android_java.cpp profiles/portable_runtime.cpp profiles/portable_runtime_bind.cpp profiles/portable_runtime_publish.cpp profiles/portable_runtime_activate.cpp prepare/java_preparation.cpp profiles/profile_file_nodes.cpp prepare/resource_apk.cpp profiles/profile_binary_patches.cpp prepare/resource_component.cpp profiles/profile_patch_graph.cpp prepare/dex_method_redirect.cpp prepare/dex_instruction_patch.cpp profiles/profile_apk_nodes.cpp profiles/profile_step_inputs.cpp prepare/source_edits.cpp prepare/ext4_image.cpp prepare/update_image.cpp prepare/lp_image.cpp prepare/base_image.cpp prepare/native_component.cpp prepare/zip_layout.cpp cli/fetch.cpp cli/fetch_segmented.cpp cli/fetch_snapshot.cpp cli/deps.cpp cli/deps_metadata_${voyemu_host_backend}.cpp qnx/qnx_host.cpp prepare/sdk_archive.cpp prepare/apk_build.cpp prepare/apk_dex.cpp prepare/zip_archive.cpp prepare/manifest_xml.cpp prepare/apk_alignment.cpp prepare/apk_digest.cpp prepare/apk_crypto.cpp prepare/apk_sign.cpp prepare/apk_identity.cpp)
+add_library(voyemu_zip STATIC qnx/qnx_update.cpp qnx/qnx_update_import.cpp cli/vehicle_capture.cpp profiles/profile_build.cpp profiles/profile_build_validate.cpp profiles/profile_build_finalize.cpp profiles/portable_fonts.cpp profiles/profile_preparation.cpp profiles/machine_preparation.cpp profiles/machine_preparation_candidate.cpp profiles/machine_preparation_verify.cpp profiles/machine_preparation_build.cpp prepare/java_toolchain.cpp prepare/java_toolchain_identity_${voyemu_host_backend}.cpp prepare/java_runtime.cpp prepare/android_java.cpp profiles/portable_runtime.cpp profiles/portable_runtime_bind.cpp profiles/portable_runtime_publish.cpp profiles/portable_runtime_activate.cpp prepare/java_preparation.cpp profiles/profile_file_nodes.cpp prepare/resource_apk.cpp profiles/profile_binary_patches.cpp prepare/resource_component.cpp profiles/profile_patch_graph.cpp prepare/dex_method_redirect.cpp prepare/dex_instruction_patch.cpp profiles/profile_apk_nodes.cpp profiles/profile_step_inputs.cpp prepare/source_edits.cpp prepare/ext4_image.cpp prepare/update_image.cpp prepare/lp_image.cpp prepare/android_vbmeta.cpp prepare/native_bridge.cpp prepare/base_image.cpp prepare/native_component.cpp prepare/zip_layout.cpp cli/fetch.cpp cli/fetch_segmented.cpp cli/fetch_snapshot.cpp cli/deps.cpp cli/deps_metadata_${voyemu_host_backend}.cpp qnx/qnx_host.cpp prepare/sdk_archive.cpp prepare/apk_build.cpp prepare/apk_dex.cpp prepare/zip_archive.cpp prepare/manifest_xml.cpp prepare/apk_alignment.cpp prepare/apk_digest.cpp prepare/apk_crypto.cpp prepare/apk_sign.cpp prepare/apk_identity.cpp)
 target_link_libraries(voyemu_zip PUBLIC voyemu_core)
 target_sources(voyemu_zip PRIVATE prepare/owner_update_archive.cpp)
 # The OEM startup videos decode at preparation through the host's own H.264 decoder.
@@ -187,16 +187,8 @@ if(APPLE)
     target_link_libraries(voyemu_zip PRIVATE voyemu_frame)
 endif()
 target_compile_options(voyemu_zip PRIVATE -Wall -Wextra -Wpedantic)
-# Linux development tool for preparing an independently signed emulator image.
-add_executable(voyemu_avd_layout EXCLUDE_FROM_ALL ../dev/avd/layout.cpp)
-target_link_libraries(voyemu_avd_layout PRIVATE voyemu_zip)
-add_executable(voyemu_avd_filesystem_inputs EXCLUDE_FROM_ALL ../dev/avd/filesystem-inputs.cpp)
-target_link_libraries(voyemu_avd_filesystem_inputs PRIVATE voyemu_zip)
 
 add_executable(voyemu cli/main.cpp cli/main_${voyemu_host_backend}.cpp cli/cli_commands.cpp cli/cli_session.cpp cli/cli_session_${voyemu_host_backend}.cpp)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    add_dependencies(voyemu voyemu_avd_layout voyemu_avd_filesystem_inputs)
-endif()
 get_filename_component(voyemu_project_root "${CMAKE_CURRENT_SOURCE_DIR}/../.." REALPATH)
 set(VOYEMU_CLANG_FORMAT "" CACHE FILEPATH "clang-format 23.1.3 for the format targets; empty selects the pinned tool")
 set(VOYEMU_GOOGLE_JAVA_FORMAT "" CACHE FILEPATH "google-java-format 2.0.0 for the format targets; empty selects the pinned tool")
@@ -682,7 +674,6 @@ if(BUILD_TESTING)
         voyemu_add_test(pre_commit_hook LABELS host TIMEOUT 30 COMMAND bash "${voyemu_project_root}/src/dev/git-hooks/pre-commit.test.sh")
     endif()
     if(VOYEMU_LINUX)
-        voyemu_add_test(avd_build_display_id LABELS host TIMEOUT 60 COMMAND bash "${voyemu_project_root}/src/dev/avd/build-display-id.test.sh" "${voyemu_project_root}/src/dev/avd/set-build-display-id.sh")
         # The release workflow packs every archive on Linux with git, GNU tar, xz and the jar of the pinned JDK.
         voyemu_add_test(release_archive LABELS host TIMEOUT 300 COMMAND bash "${voyemu_project_root}/src/dev/release/archive.test.sh" "${CMAKE_COMMAND}" "${CMAKE_BINARY_DIR}" "${voyemu_jdk}/bin/jar")
     endif()
@@ -692,6 +683,12 @@ if(BUILD_TESTING)
     add_executable(lp_image_test prepare/lp_image.test.cpp)
     target_link_libraries(lp_image_test PRIVATE voyemu_zip)
     voyemu_add_test(lp_image LABELS host TIMEOUT 60 COMMAND lp_image_test "${voyemu_project_root}/.local/build/tmp")
+    add_executable(android_vbmeta_test prepare/android_vbmeta.test.cpp)
+    target_link_libraries(android_vbmeta_test PRIVATE voyemu_zip)
+    voyemu_add_test(android_vbmeta LABELS host TIMEOUT 60 COMMAND android_vbmeta_test "${voyemu_project_root}/.local/build/tmp")
+    add_executable(native_bridge_test prepare/native_bridge.test.cpp)
+    target_link_libraries(native_bridge_test PRIVATE voyemu_zip)
+    voyemu_add_test(native_bridge LABELS host TIMEOUT 60 COMMAND native_bridge_test "${voyemu_project_root}/.local/build/tmp")
     add_executable(ext4_image_test prepare/ext4_image.test.cpp)
     target_link_libraries(ext4_image_test PRIVATE voyemu_zip)
     voyemu_add_test(ext4_image LABELS host TIMEOUT 60 COMMAND ext4_image_test)
@@ -1239,16 +1236,6 @@ install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../profiles/common/icons/" DES
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../licenses/lzokay.txt" "${CMAKE_CURRENT_SOURCE_DIR}/../licenses/SDL3.txt" "${CMAKE_CURRENT_SOURCE_DIR}/../licenses/SDL3-bundled.txt" "${CMAKE_CURRENT_SOURCE_DIR}/../licenses/stb.txt" DESTINATION notices COMPONENT Runtime)
 if(VOYEMU_LINUX)
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../licenses/SDL3-xdg-user-dirs.txt" "${CMAKE_CURRENT_SOURCE_DIR}/../licenses/SDL3-x11-wayland.txt" DESTINATION notices COMPONENT Runtime)
-    install(TARGETS voyemu_avd_layout voyemu_avd_filesystem_inputs
-            RUNTIME DESTINATION libexec/voyemu/avd COMPONENT Runtime)
-    set(voyemu_avd_dir "${CMAKE_CURRENT_SOURCE_DIR}/../dev/avd")
-    install(PROGRAMS "${voyemu_avd_dir}/apply-native-bridge.sh" "${voyemu_avd_dir}/build-filesystems.sh"
-            "${voyemu_avd_dir}/build-image.sh" "${voyemu_avd_dir}/pack-disks.sh"
-            "${voyemu_avd_dir}/prepare-tools.sh" "${voyemu_avd_dir}/set-build-display-id.sh"
-            "${voyemu_avd_dir}/verify-image.sh"
-            DESTINATION libexec/voyemu/avd COMPONENT Runtime)
-    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../../config/config-avd-tools.tsv"
-            DESTINATION libexec/voyemu/avd COMPONENT Runtime)
 endif()
 install(FILES dependencies.lock.json "${VOYEMU_VENDOR_ROOT}/imgui/LICENSE.txt" "${VOYEMU_VENDOR_ROOT}/json/LICENSE.MIT" "${CMAKE_CURRENT_SOURCE_DIR}/../../LICENSE" DESTINATION notices COMPONENT Runtime)
 install(FILES "${VOYEMU_VENDOR_ROOT}/miniz/LICENSE" DESTINATION notices RENAME miniz-LICENSE.txt COMPONENT Runtime)

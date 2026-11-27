@@ -61,7 +61,7 @@ static Json validate_plain_android_system_candidate(const std::filesystem::path 
     const auto candidate = read_private_json(receipt, 1 << 20);
     const auto target = candidate.value("target", Json::object()).value("name", std::string{});
     const auto definition = authoring_profile(root, profile, target);
-    need(!profile_multimedia_only(definition) && profile_feature(definition, "system_upgrade"),
+    need(profile_feature(definition, "system_upgrade"),
          "system-only upgrade requires a supported profile");
     api30_framework_boot::verify(definition);
     need(native_base_api(definition.at("android")) == 30, "API30 system recipe required");

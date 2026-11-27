@@ -25,7 +25,6 @@ Pushing a stable release tag starts the workflow automatically. For a prerelease
 | `voyemu` or `voyemu.exe` | The launcher: CLI, supervisor, window and graphics worker |
 | `profiles/` | Every profile of the revision of the launcher |
 | `notices/` | The Voyemu license, third-party licenses and `dependencies.lock.json` |
-| `libexec/voyemu/avd/` | Signed Android image tools and their pins, in the Linux archive |
 | `README.md`, `CHANGELOG.md`, `SECURITY.md`, their Russian versions and `LICENSE` | The texts of the project root |
 
 OEM inputs and images derived from them are never part of a release.
@@ -52,7 +51,7 @@ cmake --install .local/build/native --component Runtime --prefix "$PWD/.local/bu
 src/dev/release/archive.sh 1.0.0-beta1 linux-x64 .local/build/stage .local/build/release
 ```
 
-The `Runtime` install component of CMake holds the launcher, `notices/`, the window artwork of `profiles/common/` and, on Linux, `libexec/voyemu/avd/`. The release workflow includes the Linux tools in the staging artifact. `archive.sh VERSION HOST STAGE OUTPUT` takes the launcher, notices and host tools from that stage, adds the tracked files of `profiles/` and the root texts and writes the archive of `HOST` with its `.sha256` file to `OUTPUT`. Entries are sorted, directories and executables have mode 755, other files 644, owner and group are 0, and every time is 00:00 UTC of `VOYEMU_RELEASE_DATE` in the HEAD commit, or `SOURCE_DATE_EPOCH` when it is set, so a rerun writes the same bytes. The script runs on Linux with git, GNU tar and xz. The Windows zip needs the `jar` tool of the pinned JDK in `JAR`. The CTest `release_archive` builds the Linux and Windows archives twice, compares them, checks their layout and runs the extracted Linux launcher without `src/`.
+The `Runtime` install component of CMake holds the launcher, `notices/` and the window artwork of `profiles/common/`. `archive.sh VERSION HOST STAGE OUTPUT` takes the launcher and `notices/` from it, adds the tracked files of `profiles/` and the root texts and writes the archive of `HOST` with its `.sha256` file to `OUTPUT`. Entries are sorted, directories have mode 755, files 644 and the launcher 755, owner and group are 0, and every time is 00:00 UTC of `VOYEMU_RELEASE_DATE` in the HEAD commit, or `SOURCE_DATE_EPOCH` when it is set, so a rerun writes the same bytes. The script runs on Linux with git, GNU tar and xz; the Windows zip needs the `jar` tool of the pinned JDK in `JAR`. The CTest `release_archive` builds the Linux and Windows archives twice, compares them, checks their layout and runs the extracted Linux launcher without `src/`.
 
 ## Homebrew
 

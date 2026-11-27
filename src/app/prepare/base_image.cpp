@@ -88,6 +88,11 @@ CleanBase native_clean_base(const Json &descriptor) {
         }
     }
 
+    // A base whose first-stage mount verifies vbmeta declares the digest of its stock chain.
+    if (valid && clean->contains("vbmeta_digest")) {
+        valid = api == 30 && sha256_pin(clean->at("vbmeta_digest"));
+    }
+
     if (!valid) {
         throw VoyemuError("BASE_DESCRIPTOR", "clean base pins required");
     }
@@ -107,6 +112,8 @@ CleanBase native_clean_base(const Json &descriptor) {
             partition->offset = partitions.at(name).at("offset").get<std::uint64_t>();
             partition->bytes = partitions.at(name).at("bytes").get<std::uint64_t>();
         }
+
+        result.vbmeta_digest = clean->value("vbmeta_digest", std::string{});
     }
 
     return result;

@@ -125,6 +125,18 @@ int main(int argc, char **argv) {
         check(result.at("bytes") == 6 && sha256_file(output / "own") == sha256_bytes("native") &&
                       result.at("filesystem_mounted") == false,
               "raw filesystem extent extraction exact without mount");
+        // The inode of each requested path carries its permission bits and full owner ids.
+        auto owned = good;
+        put(owned, 3072 + 2 * 128 + 2, 1000, 2);
+        put(owned, 3072 + 2 * 128 + 120, 1, 2);
+        put(owned, 3072 + 2 * 128 + 24, 2000, 2);
+        const auto owned_file = store("owned.img", owned);
+        std::map<std::string, Ext4Inode> inodes;
+        (void)extract_pinned_ext4_files(owned_file, sha256_bytes(owned), {"/own"}, root / "owned",
+                                        0, {}, &inodes);
+        check(inodes.size() == 1 && inodes.at("/own").mode == 0644 &&
+                      inodes.at("/own").uid == 65536 + 1000 && inodes.at("/own").gid == 2000,
+              "extracted inode mode and owner differ");
         const auto dynamic = lp_fixture::fixture(good);
         const auto dynamic_file = store("dynamic.img", dynamic);
         const auto dynamic_output = root / "dynamic";

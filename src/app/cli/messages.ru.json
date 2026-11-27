@@ -59,8 +59,6 @@
     "error.profile_required": "{command} требует идентификатор профиля",
     "error.profile_target_default": "у профиля нет единственной цели сборки для процессора {abi} этого хоста; выберите её параметром --target: {targets}",
     "error.profile_target_missing": "профиль не объявляет цель сборки {target}; объявлены {targets}",
-    "error.profile_target_multimedia": "выбранная цель поддерживает только мультимедиа",
-    "error.profile_target_signed_host": "цель сборки {target} готовится как подписанная система, а её пока собирает только Linux; выберите другую цель параметром --target",
     "error.profile_target_single": "этот профиль не объявляет цели сборки",
     "error.project_root": "установка Voyemu не найдена; держите исполняемый файл рядом с поставляемой папкой profiles",
     "error.provider_scope": "провайдеры допустимы только при новом запуске start",

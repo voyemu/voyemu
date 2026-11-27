@@ -59,8 +59,6 @@
     "error.profile_required": "{command} requires a profile identifier",
     "error.profile_target_default": "no single build target of this profile runs the {abi} processor of this host; select one with --target: {targets}",
     "error.profile_target_missing": "this profile does not declare build target {target}; it declares {targets}",
-    "error.profile_target_multimedia": "the selected target supports multimedia only",
-    "error.profile_target_signed_host": "build target {target} is prepared as a signed system, which only Linux can build yet; select another build target with --target",
     "error.profile_target_single": "this profile does not declare build targets",
     "error.project_root": "Voyemu installation not found; keep the executable beside the supplied profiles folder",
     "error.provider_scope": "providers require fresh start",

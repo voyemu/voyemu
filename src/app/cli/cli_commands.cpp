@@ -127,24 +127,19 @@ int deps_command(const Arguments &args, const Emit &emit) {
 
     // While the QNX engine of this host can be neither downloaded nor taken from the cache, deps
     // reports it unavailable and machines run without the cluster.
-    const auto profile_file = args.root / "profiles" / args.profile / "profile.json";
-    const bool multimedia_only =
-            !args.profile.empty() && std::filesystem::exists(profile_file) &&
-            profile_multimedia_only(authoring_profile(args.root, args.profile, target));
-
-    if (!multimedia_only) {
-        try {
-            result["qnx_host"] = step("qnx_host", [&] {
-                return voyemu::install_qnx_host(args.root, args.offline, preparation_margin);
-            });
-        } catch (const std::runtime_error &error) {
-            if (!std::string_view(error.what()).starts_with("QNX_HOST_ASSET_MISSING:")) {
-                throw;
-            }
-
-            result["qnx_host"] = {{"status", "unavailable"}, {"reason", error.what()}};
+    try {
+        result["qnx_host"] = step("qnx_host", [&] {
+            return voyemu::install_qnx_host(args.root, args.offline, preparation_margin);
+        });
+    } catch (const std::runtime_error &error) {
+        if (!std::string_view(error.what()).starts_with("QNX_HOST_ASSET_MISSING:")) {
+            throw;
         }
+
+        result["qnx_host"] = {{"status", "unavailable"}, {"reason", error.what()}};
     }
+
+    const auto profile_file = args.root / "profiles" / args.profile / "profile.json";
 
     if ((!target.empty() && std::filesystem::exists(profile_file)) ||
         (!args.profile.empty() &&
@@ -224,22 +219,11 @@ int build_command(const Arguments &args, const Emit &emit) {
     const auto selection = build_target_for(args);
     const auto &selected = selection.name;
     const auto definition = authoring_profile(args.root, args.profile, selected);
-    const auto multimedia_only = profile_multimedia_only(definition);
-
-    if (multimedia_only && ((args.cluster_explicit && args.cluster) || !args.multimedia)) {
-        throw LocalizedError("PROFILE_TARGET", "error.profile_target_multimedia");
-    }
-
-    if (profile_signed_preparation(definition) && !os::host_signed_android_preparation) {
-        throw LocalizedError("PROFILE_TARGET", "error.profile_target_signed_host",
-                             {{"target", selected}});
-    }
 
     // A profile without profile-qnx.json has no cluster, and without an installable QNX engine the
     // default build prepares the machine without the cluster; an explicit --cluster=on stops at the
     // engine.
     const bool declared_cluster =
-            !multimedia_only &&
             std::filesystem::exists(args.root / "profiles" / args.profile / "profile-qnx.json");
     const auto unavailable = args.cluster_explicit || !args.multimedia || !declared_cluster
                                      ? std::string{}

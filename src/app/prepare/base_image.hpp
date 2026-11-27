@@ -60,6 +60,8 @@ struct CleanBase {
     std::map<std::string, std::string> boot_files, images, files;
     std::string metadata_sha256;
     CleanBasePartition system, system_ext;
+    // The stock vbmeta digest of a base whose first-stage mount verifies vbmeta, or empty.
+    std::string vbmeta_digest;
     // The SHA-256 of name in group, such as images and system.img.
     std::string pin(const char *group, const std::string &name) const;
 };

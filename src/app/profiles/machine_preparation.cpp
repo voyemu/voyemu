@@ -732,7 +732,7 @@ std::uint64_t android_candidate_overlay_scratch_bytes(const Json &profile, std::
 
 std::vector<ZipEntry>
 android_candidate_system_native_libraries(const Json &entry, const std::vector<ZipEntry> &inventory,
-                                          std::string_view manifest) {
+                                          std::string_view manifest, std::string_view abi) {
     if (!entry.contains("target")) {
         return {};
     }
@@ -768,12 +768,14 @@ android_candidate_system_native_libraries(const Json &entry, const std::vector<Z
     std::vector<ZipEntry> out;
     std::set<std::string> names;
     std::uint64_t bytes = 0;
+    const auto folder = "lib/" + std::string(abi) + "/";
+    need(abi == "arm64-v8a" || abi == "x86_64" || abi == "x86", "native library ABI unsupported");
 
     for (const auto &file : inventory) {
-        if (!file.directory && file.name.starts_with("lib/arm64-v8a/")) {
-            need(std::regex_match(file.name,
-                                  std::regex(R"(lib/arm64-v8a/lib[A-Za-z0-9_.+-]+\.so)")),
-                 "ordinary ARM64 shared library required");
+        if (!file.directory && file.name.starts_with(folder)) {
+            need(std::regex_match(file.name.substr(folder.size()),
+                                  std::regex(R"(lib[A-Za-z0-9_.+-]+\.so)")),
+                 "ordinary shared library required");
             auto basename = std::filesystem::path(file.name).filename().generic_string();
 
             for (char &c : basename) {
@@ -785,13 +787,40 @@ android_candidate_system_native_libraries(const Json &entry, const std::vector<Z
             need(file.bytes > 0 && file.bytes <= 64ULL << 20 &&
                          file.bytes <= (512ULL << 20) - bytes && names.insert(basename).second &&
                          out.size() < 512,
-                 "bounded portable unique ARM64 shared libraries required");
+                 "bounded portable unique shared libraries required");
             bytes += file.bytes;
             out.push_back(file);
         }
     }
 
     return out;
+}
+
+std::string android_candidate_merged_lines(std::string_view guest, std::string_view source) {
+    std::string merged(guest);
+    const auto existing = lines(merged);
+
+    for (const auto &line : lines(source)) {
+        if (std::find(existing.begin(), existing.end(), line) == existing.end()) {
+            if (!merged.empty() && !merged.ends_with('\n')) {
+                merged += '\n';
+            }
+
+            merged += line + "\n";
+        }
+    }
+
+    return merged;
+}
+
+std::vector<std::string> android_guest_native_abis(std::string_view guest_abi) {
+    // An x86_64 guest runs 64-bit and 32-bit x86 processes natively; ARM code of other APKs runs
+    // through its Native Bridge.
+    if (guest_abi == "x86_64") {
+        return {"x86_64", "x86"};
+    }
+
+    return {"arm64-v8a"};
 }
 
 unsigned android_candidate_api(const Json &profile) {

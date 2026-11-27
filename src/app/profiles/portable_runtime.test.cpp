@@ -1,6 +1,8 @@
 #include "portable_runtime.hpp"
+#include "android_boot_pins.hpp"
 #include "android_engine.hpp"
 #include "android_port_lease.hpp"
+#include "android_vbmeta_fixture.hpp"
 #include "api30_framework_boot.hpp"
 #include "host_refresh.hpp"
 #include "image_clone.hpp"
@@ -24,7 +26,6 @@
 #include "qnx_process_ram.hpp"
 #include "qnx_runtime_layout.hpp"
 #include "quickboot.hpp"
-#include "signed_android.hpp"
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -229,98 +230,99 @@ void sparse_copy_checks(const std::filesystem::path &root) {
 #endif
 }
 
-// A signed machine is bound by the SHA-256 pins, the vbmeta digest and the two acceptance boot IDs
-// of its manifest; no key of the host takes part.
-void signed_boot_pin_checks(const std::filesystem::path &root) {
-    const auto seed = root / "signed-boot-seed";
+// A machine on a base that binds a vbmeta digest boots with the stock boot parameters carrying the
+// digest of the vbmeta chain of its own system image; no key of the host takes part.
+void vbmeta_boot_pin_checks(const std::filesystem::path &root) {
+    const auto seed = root / "vbmeta-boot-seed";
 
     ensure_private_directory(seed / "android");
-    const std::string digest(64, '5');
+    const auto stock = vbmeta_fixture::disk(0), remounted = vbmeta_fixture::disk(1);
+    const auto read = [](const std::string &bytes) {
+        return [&bytes](std::uint64_t offset, std::size_t size) {
+            return bytes.substr(offset, size);
+        };
+    };
+    const auto stock_chain = android_vbmeta_chain(read(stock.bytes), stock.partitions),
+               machine_chain = android_vbmeta_chain(read(remounted.bytes), remounted.partitions);
+    const std::string name = "VerifiedBootParams.textproto";
+    const auto stock_parameters = vbmeta_fixture::parameters(stock_chain.digest, stock_chain.bytes);
+    const auto machine_parameters = vbmeta_fixture::parameters(machine_chain.digest,
+                                                               stock_chain.bytes);
     auto base = android_base(30);
     base["package"] = "system-images;android-30;default;x86_64";
     base["url"] = "https://dl.google.com/android/repository/sys-img/android/x86_64-30_r11.zip";
-    Json manifest = {
-            {"profile", "synthetic-signed"},
-            {"scope", "android"},
-            {"android",
-             {{"api", 30}, {"abi", "x86_64"}, {"base_archive_sha256", base.at("sha256")}}}};
-    Json files = Json::object();
-    const auto pin = [&](const std::string &name, const std::string &bytes) {
-        const auto file = seed / "android" / name;
-        std::ofstream(file, std::ios::binary) << bytes;
-        const Json descriptor = {{"file", "android/" + name},
-                                 {"sha256", sha256_file(file)},
-                                 {"bytes", std::filesystem::file_size(file)}};
-        files[name] = {{"sha256", descriptor.at("sha256")}, {"bytes", descriptor.at("bytes")}};
-
-        return descriptor;
+    base["clean_base"]["vbmeta_digest"] = stock_chain.digest;
+    base["clean_base"]["boot_files"][name] = sha256_bytes(stock_parameters);
+    base["clean_base"]["logical_partitions"]["system"] = {
+            {"offset", stock.partitions.at("system").offset},
+            {"bytes", stock.partitions.at("system").bytes}};
+    const auto write = [&](const std::string &file, const std::string &bytes) {
+        std::ofstream(seed / "android" / file, std::ios::binary) << bytes;
     };
-
-    for (const auto *name : {"system.img", "vendor.img"}) {
-        manifest["android"]["images"][name] = pin(name, std::string("signed ") + name);
-    }
-
-    // The clean pins of this synthetic base are the boot files of the fixture.
-    for (auto &item : base.at("clean_base").at("boot_files").items()) {
-        const auto bytes =
-                item.key() == "VerifiedBootParams.textproto"
-                        ? "major_version: 2\nparam: \"androidboot.vbmeta.digest=" + digest + "\"\n"
-                        : "boot " + item.key();
-        const auto descriptor = pin(item.key(), bytes);
-        manifest["android"]["boot_files"][item.key()] = descriptor;
-        item.value() = descriptor.at("sha256");
-    }
-
-    manifest["android"]["signed_android"] = {
-            {"base_archive_sha256", base.at("sha256")},
-            {"vbmeta_digest", digest},
-            {"system_root_sha256", std::string(64, '6')},
-            {"first_boot_id", "6712c071-a649-43a9-8bab-81d440fe323b"},
-            {"cold_boot_id", "e8c38b50-aa59-4703-9525-b1ecdab800e7"},
-            {"files", files}};
-    const Json definition = {{"id", "synthetic-signed"},
+    write("system.img", remounted.bytes);
+    write(name, machine_parameters);
+    Json manifest = {{"profile", "synthetic-vbmeta"},
+                     {"android",
+                      {{"api", 30},
+                       {"abi", "x86_64"},
+                       {"vbmeta_digest", machine_chain.digest},
+                       {"boot_files",
+                        {{name,
+                          {{"file", "android/" + name},
+                           {"sha256", sha256_bytes(machine_parameters)},
+                           {"bytes", machine_parameters.size()}}}}}}}};
+    const Json definition = {{"id", "synthetic-vbmeta"},
                              {"target",
                               {{"name", "x86"},
                                {"guestAbi", "x86_64"},
-                               {"preparation", "signed-offline"},
+                               {"preparation", "sdk"},
                                {"androidBase", "synthetic-base"}}},
                              {"android", base}};
-    check(checked_signed_android_boot_pins(seed, definition, manifest) ==
-                  portable_clean_boot_pins(base),
-          "signed machine boot pins differ from its manifest");
+    auto expected = portable_clean_boot_pins(base);
+    expected[name] = sha256_bytes(machine_parameters);
+    check(checked_android_boot_pins(seed, definition, manifest) == expected,
+          "machine boot pins differ from its manifest");
     const auto rejected = [&](const std::function<void(Json &)> &change) {
         auto changed = manifest;
         change(changed["android"]);
         try {
-            (void)checked_signed_android_boot_pins(seed, definition, changed);
+            (void)checked_android_boot_pins(seed, definition, changed);
         } catch (const VoyemuError &) {
             return true;
         }
 
         return false;
     };
-    check(rejected([](Json &android) {
-              android["signed_android"]["cold_boot_id"] =
-                      android["signed_android"]["first_boot_id"];
+    check(rejected([&](Json &android) {
+              android["vbmeta_digest"] = stock_chain.digest;
           }),
-          "signed machine accepted one acceptance boot");
-    check(rejected([](Json &android) {
-              android["signed_android"]["vbmeta_digest"] = std::string(64, '7');
+          "machine accepted a vbmeta digest absent from its boot parameters");
+    check(rejected([&](Json &android) {
+              android.erase("vbmeta_digest");
           }),
-          "signed machine accepted a vbmeta digest absent from its boot parameters");
-    check(rejected([](Json &android) {
-              android["signed_android"].erase("system_root_sha256");
+          "machine accepted boot parameters without its vbmeta digest");
+    // The boot parameters may differ from the stock ones only in the digest.
+    const auto other = machine_parameters + "param: \"androidboot.other=1\"\n";
+    write(name, other);
+    check(rejected([&](Json &android) {
+              android["boot_files"][name]["sha256"] = sha256_bytes(other);
           }),
-          "signed machine accepted a proof without its dm-verity root");
-    check(rejected([](Json &android) {
-              android["signed_android"]["files"]["vendor.img"]["sha256"] = std::string(64, '8');
-          }),
-          "signed machine accepted an image outside its verified release");
-    std::ofstream(seed / "android/vendor.img.qcow2", std::ios::binary) << "overlay";
-    check(rejected([](Json &) {}), "signed machine accepted a writable vendor overlay");
-    std::filesystem::remove(seed / "android/vendor.img.qcow2");
-    std::ofstream(seed / "android/kernel-ranchu", std::ios::binary) << "changed kernel";
-    check(rejected([](Json &) {}), "signed machine accepted a changed boot file");
+          "machine accepted boot parameters beyond the vbmeta digest");
+    write(name, machine_parameters);
+    // The digest is that of the system image the machine carries.
+    write("system.img", stock.bytes);
+    check(rejected([](Json &) {}), "machine accepted a system image of another vbmeta chain");
+    // A base that binds no digest keeps its stock boot parameters.
+    auto unbound = definition;
+    unbound["android"]["clean_base"].erase("vbmeta_digest");
+    bool refused = false;
+    try {
+        (void)checked_android_boot_pins(seed, unbound, manifest);
+    } catch (const VoyemuError &) {
+        refused = true;
+    }
+
+    check(refused, "a base without a vbmeta digest accepted a machine digest");
     std::filesystem::remove_all(seed);
 }
 
@@ -332,7 +334,7 @@ void undeclared_android_checks(const std::filesystem::path &root) {
 
     for (const auto &verify : std::vector<std::function<void()>>{
                  [&] {
-                     (void)checked_signed_android_boot_pins(root, definition, manifest);
+                     (void)checked_android_boot_pins(root, definition, manifest);
                  },
                  [&] {
                      portable_detail::check_android_guest_identity(definition, manifest);
@@ -3093,7 +3095,7 @@ int main(int argc, char **argv) {
             passion_wheel_refresh_checks(root);
             passion_system_upgrade_checks(root, std::filesystem::canonical(argv[0]));
             sparse_copy_checks(root);
-            signed_boot_pin_checks(root);
+            vbmeta_boot_pin_checks(root);
             undeclared_android_checks(root);
         }
 
@@ -5395,27 +5397,13 @@ int main(int argc, char **argv) {
 
                 auto clean_x86 = x86;
                 clean_x86["android"]["clean_base"] = android_base(30).at("clean_base");
-                check(checked_signed_android_boot_pins(seed30, definition30, seed_metadata30) ==
+                check(checked_android_boot_pins(seed30, definition30, seed_metadata30) ==
                               portable_clean_boot_pins(definition30.at("android")),
-                      "ARM machine unexpectedly required a signing proof");
-                // Only a signed-offline target requires a signing proof; an x86_64 guest without it
-                // is prepared live.
-                check(checked_signed_android_boot_pins(seed30, clean_x86, prepared) ==
+                      "ARM machine boot pins differ from its base");
+                // A base that binds no vbmeta digest keeps the stock boot parameters on x86_64 too.
+                check(checked_android_boot_pins(seed30, clean_x86, prepared) ==
                               portable_clean_boot_pins(clean_x86.at("android")),
-                      "unsigned x86_64 machine unexpectedly required a signing proof");
-                auto signed_target = clean_x86;
-                signed_target["target"] = {{"name", "x86"},
-                                           {"guestAbi", "x86_64"},
-                                           {"preparation", "signed-offline"},
-                                           {"androidBase", "synthetic-base"}};
-                bool rejected = false;
-                try {
-                    (void)checked_signed_android_boot_pins(seed30, signed_target, prepared);
-                } catch (const VoyemuError &error) {
-                    rejected = error.code() == "SIGNED_ANDROID";
-                }
-
-                check(rejected, "portable Android boot checks accepted missing signing proof");
+                      "x86_64 machine boot pins differ from its base");
 
 #ifndef _WIN32
                 {

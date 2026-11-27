@@ -39,20 +39,14 @@ for file in "$linux.tar.xz" "$windows.zip"; do
 done
 expected=$(printf '%s\n' CHANGELOG.md CHANGELOG.ru.md LICENSE README.md README.ru.md SECURITY.md \
     SECURITY.ru.md notices profiles)
-linux_expected=$(printf '%s\n' "$expected" libexec | LC_ALL=C sort)
 tarball="$work/first/$linux.tar.xz"
 tar -tJf "$tarball" > "$work/entries"
 # The archive sorts paths; the listing adds a slash to directories.
 sed 's|/$||' "$work/entries" | LC_ALL=C sort -c || fail "tar entries are not sorted"
 [[ "$(grep -v "^$top/" "$work/entries" || true)" == "" ]] || fail "tar entries outside $top/"
 listed=$(cut -d/ -f2 "$work/entries" | grep -v '^$' | grep -vx voyemu | LC_ALL=C sort -u)
-[[ "$listed" == "$linux_expected" ]] || fail "tar top level: $listed"
+[[ "$listed" == "$expected" ]] || fail "tar top level: $listed"
 grep -qx "$top/voyemu" "$work/entries" || fail "tar launcher"
-for member in apply-native-bridge.sh build-filesystems.sh build-image.sh pack-disks.sh \
-              prepare-tools.sh set-build-display-id.sh verify-image.sh voyemu_avd_layout voyemu_avd_filesystem_inputs; do
-    grep -qx "$top/libexec/voyemu/avd/$member" "$work/entries" || fail "AVD tool $member"
-done
-grep -qx "$top/libexec/voyemu/avd/config-avd-tools.tsv" "$work/entries" || fail "AVD tool pins"
 [[ "$(grep -c "^$top/profiles/.*[^/]$" "$work/entries")" == "$(git -C "$project" ls-tree -r --name-only HEAD profiles | wc -l)" ]] ||
     fail "tar profiles differ from the profiles of HEAD"
 [[ "$(tar -tvJf "$tarball" --numeric-owner | awk '{print $2}' | sort -u)" == 0/0 ]] || fail "tar owners"
@@ -60,7 +54,6 @@ grep -qx "$top/libexec/voyemu/avd/config-avd-tools.tsv" "$work/entries" || fail 
     fail "tar times"
 [[ "$(tar -tvJf "$tarball" | grep " $top/voyemu$" | cut -c1-10)" == -rwxr-xr-x ]] || fail "launcher mode"
 unzip -Z1 "$work/first/$windows.zip" > "$work/zip-entries"
-if grep -q '/libexec/voyemu/avd/' "$work/zip-entries"; then fail 'Linux tools in Windows archive'; fi
 LC_ALL=C sort -c "$work/zip-entries" || fail "zip entries are not sorted"
 listed=$(cut -d/ -f2 "$work/zip-entries" | grep -vx voyemu.exe | LC_ALL=C sort -u)
 [[ "$listed" == "$expected" ]] || fail "zip top level: $listed"

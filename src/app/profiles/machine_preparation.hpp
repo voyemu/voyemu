@@ -9,9 +9,9 @@ namespace voyemu {
 struct AndroidCandidateRequest {
     std::string profile, profile_sha256, artifact_result_sha256, clean_receipt_sha256;
     std::filesystem::path artifact_result, clean_base, sdk;
-    std::filesystem::path signed_sdk;
-    Json signed_release;
-    std::map<std::string, std::string> signed_system_selections;
+    // The extracted Native Bridge of the Android base, or none.
+    std::filesystem::path native_bridge;
+    Json native_bridge_descriptor;
     std::map<std::string, std::string> tool_pins; // Absolute host file -> SHA256.
     unsigned port = 5580;
     // The candidate steps other than the boots of the emulator, which have no time limit.
@@ -43,10 +43,16 @@ void android_candidate_start_multidisplay(ChildProcess &, const std::filesystem:
 // Pure install ordering: system/framework/policy first, data seeds next, APKs last.
 // Returns only a registered clean ARM64 base API; it does not validate OEM compatibility.
 unsigned android_candidate_api(const Json &profile);
-// System APKs with extractNativeLibs need sibling ARM64 libraries; data APKs use PackageManager.
+// System APKs with extractNativeLibs need sibling libraries of each native ABI of the guest, such
+// as lib/arm64-v8a; data APKs use PackageManager.
 std::vector<ZipEntry>
 android_candidate_system_native_libraries(const Json &entry, const std::vector<ZipEntry> &inventory,
-                                          std::string_view manifest);
+                                          std::string_view manifest,
+                                          std::string_view abi = "arm64-v8a");
+// The guest file with each line of source that it lacks added after its last line.
+std::string android_candidate_merged_lines(std::string_view guest, std::string_view source);
+// The ABIs whose libraries a system APK provides to a guest of guest_abi, primary first.
+std::vector<std::string> android_guest_native_abis(std::string_view guest_abi);
 
 std::string android_candidate_cpu_config(const Json &profile);
 // Actual finite Passion system payload plus directory headroom and F2FS reserve.

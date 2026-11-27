@@ -59,8 +59,6 @@
     "error.profile_required": "{command} 需要配置文件标识符",
     "error.profile_target_default": "此配置没有唯一适合本主机 {abi} 处理器的构建目标；请用 --target 选择：{targets}",
     "error.profile_target_missing": "此配置未声明构建目标 {target}；已声明 {targets}",
-    "error.profile_target_multimedia": "所选目标仅支持多媒体",
-    "error.profile_target_signed_host": "构建目标 {target} 以签名系统方式准备，目前只有 Linux 能构建；请用 --target 选择其他构建目标",
     "error.profile_target_single": "此配置未声明任何构建目标",
     "error.project_root": "找不到 Voyemu 安装；请将可执行文件放在随附的 profiles 目录旁边",
     "error.provider_scope": "提供程序仅适用于全新的 start",

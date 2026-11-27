@@ -508,8 +508,7 @@ static bool target_rejected(const std::function<void()> &call, const char *messa
 }
 
 static void verify_profile_target_hosts() {
-    // A synthetic profile with targets of two ABIs, two APIs and two preparations; the names are
-    // data, never rules.
+    // A synthetic profile with targets of two ABIs and two APIs; the names are data, never rules.
     const Json definition = {
             {"schema", 1},
             {"id", "synthetic-targets"},
@@ -519,7 +518,7 @@ static void verify_profile_target_hosts() {
              {{"native", {{"guestAbi", "arm64-v8a"}, {"preparation", "sdk"}}},
               {"intel-api30",
                {{"guestAbi", "x86_64"},
-                {"preparation", "signed-offline"},
+                {"preparation", "sdk"},
                 {"androidBase", "synthetic-x86-30"},
                 {"emulator", {{"acceleration", "required"}, {"gpuMode", "host"}}}}},
               {"intel-api28",
@@ -548,9 +547,7 @@ static void verify_profile_target_hosts() {
         check(target.at("target").at("name") == name &&
                       target.at("target").at("guestAbi") == declared.at("guestAbi") &&
                       target.at("target").at("preparation") == declared.at("preparation") &&
-                      !target.contains("targets") &&
-                      profile_signed_preparation(target) ==
-                              (declared.at("preparation") == "signed-offline"),
+                      !target.contains("targets"),
               "each build target resolves its own ABI, base and preparation");
     }
 
@@ -621,9 +618,15 @@ static void verify_profile_target_hosts() {
     host_specific["targets"]["intel-api30"]["emulator"]["acceleration"] = "kvm";
     auto audio = definition;
     audio["targets"]["intel-api30"]["emulator"]["audioOutput"] = true;
+    // Every target prepares its guest live; the removed offline preparation is unknown.
+    auto offline = definition;
+    offline["targets"]["intel-api30"]["preparation"] = "signed-offline";
 
-    for (const auto &[candidate, target] : std::array<std::pair<Json, const char *>, 3>{
-                 {{foreign, "native"}, {host_specific, "intel-api30"}, {audio, "intel-api30"}}}) {
+    for (const auto &[candidate, target] :
+         std::array<std::pair<Json, const char *>, 4>{{{foreign, "native"},
+                                                       {host_specific, "intel-api30"},
+                                                       {audio, "intel-api30"},
+                                                       {offline, "intel-api30"}}}) {
         auto changed = files;
         changed[root / "profiles/synthetic-targets/profile.json"] = candidate;
         check(target_rejected(
@@ -822,8 +825,9 @@ int main(int argc, char **argv) {
                          Json{{"artifact", "files:usb-drive-fstab"},
                               {"type", "file"},
                               {"target", "/vendor/etc/fstab.ranchu"},
-                              {"mode", "0644"}}) == 1,
-              "H53 installs the emulator USB filesystem table at its exact vendor path");
+                              {"mode", "0644"},
+                              {"merge", "lines"}}) == 1,
+              "H53 adds the emulator USB mount rule to the vendor fstab of its base");
         check(passion_wheel_capability(passion).at("routes") == passion_wheel_routes(),
               "Passion standard Android wheel routes are exact");
         {

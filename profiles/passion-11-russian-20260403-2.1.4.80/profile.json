@@ -12,7 +12,7 @@
     "x86": {
       "guestAbi": "x86_64",
       "androidBase": "android-30-x86_64",
-      "preparation": "signed-offline",
+      "preparation": "sdk",
       "emulator": {
         "acceleration": "required",
         "gpuMode": "host",
@@ -2552,7 +2552,8 @@
       "artifact": "files:usb-drive-fstab",
       "type": "file",
       "target": "/vendor/etc/fstab.ranchu",
-      "mode": "0644"
+      "mode": "0644",
+      "merge": "lines"
     },
     {
       "artifact": "original:VhalService",
@@ -3658,7 +3659,7 @@
       "file": "voyemu-framework.xml"
     },
     "usb-drive-fstab": {
-      "file": "fstab.ranchu"
+      "file": "usb-drive.fstab"
     },
     "message-center-vintf": {
       "file": "voyemu-message-center.xml"

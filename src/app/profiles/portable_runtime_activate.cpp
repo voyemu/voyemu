@@ -1,6 +1,6 @@
+#include "android_boot_pins.hpp"
 #include "os/platform.hpp"
 #include "portable_runtime_internal.hpp"
-#include "signed_android.hpp"
 
 // Activates a prepared machine as the runtime of a profile.
 namespace voyemu {
@@ -137,8 +137,7 @@ Json activate_portable_runtime(const std::filesystem::path &root, std::string_vi
 
     const auto development_kernel = checked_development_kernel(seed, definition, manifest);
     const auto can_model_sha = checked_can_model_receipt(seed, manifest);
-    const auto clean_pins = checked_signed_android_boot_pins(seed, definition, manifest);
-    const bool signed_system = manifest.at("android").contains("signed_android");
+    const auto clean_pins = checked_android_boot_pins(seed, definition, manifest);
 
     for (const auto &[name, sha] : clean_pins) {
         // A seed clean base carries the development kernel the profile declares.
@@ -249,10 +248,6 @@ Json activate_portable_runtime(const std::filesystem::path &root, std::string_vi
 
     for (const auto &backing : {"userdata-qemu.img", "cache.img", "encryptionkey.img",
                                 "base/system.img", "base/vendor.img"}) {
-        if (signed_system && std::string_view(backing).starts_with("base/")) {
-            continue;
-        }
-
         const auto name = std::filesystem::path(backing).filename().string() + ".qcow2";
         native_tool(qemu_image, {"create", "-f", "qcow2", "-F", "raw", "-b", backing, name});
         need(std::filesystem::is_regular_file(machine_dir / name) &&
@@ -305,10 +300,6 @@ Json activate_portable_runtime(const std::filesystem::path &root, std::string_vi
                                            final_machine / "config-template.ini", avd,
                                            std::move(pins), definition, Json::object(),
                                            manifest.at("profile").get<std::string>());
-
-    if (signed_system) {
-        android["signed_system"] = true;
-    }
 
     if (!can_model_sha.empty()) {
         android["can_model_observer_sha256"] = can_model_sha;

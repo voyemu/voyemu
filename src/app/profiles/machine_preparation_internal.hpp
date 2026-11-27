@@ -3,6 +3,7 @@
 #include "android_audio.hpp"
 #include "android_engine.hpp"
 #include "android_owned_package.hpp"
+#include "android_vbmeta.hpp"
 #include "api30_framework_boot.hpp"
 #include "apk_base.hpp"
 #include "base_image.hpp"
@@ -20,6 +21,7 @@
 #include "machine_preparation.hpp"
 #include "media_discovery.hpp"
 #include "media_rpc.hpp"
+#include "native_bridge.hpp"
 #include "original_navi_candidate.hpp"
 #include "os/fs.hpp"
 #include "os/platform.hpp"
@@ -47,6 +49,7 @@
 #include <fstream>
 #include <functional>
 #include <limits>
+#include <map>
 #include <optional>
 #include <regex>
 #include <set>
@@ -116,7 +119,11 @@ struct Candidate {
     unsigned boots = 0;
     std::function<bool()> cancelled;
     bool capture_frames = false, retained_disks = false, watch_verified_boot = false;
-    bool signed_system = false;
+    // A base whose first-stage mount verifies vbmeta: its stock boot parameters, the digest they
+    // declare, the extents of the partitions its vbmeta chains to and the digest of the machine.
+    std::string stock_boot_parameters, stock_vbmeta_digest, vbmeta_digest;
+    std::map<std::string, LogicalPartitionExtent> vbmeta_partitions;
+    Json boot_profile;
 
     Candidate(std::filesystem::path r, std::filesystem::path s, std::filesystem::path sdk_root,
               std::filesystem::path a, std::filesystem::path e, std::filesystem::path q, unsigned p,
@@ -304,6 +311,7 @@ struct Candidate {
     }
 
     void boot(const Json &profile) {
+        boot_profile = profile;
         const auto kernel = portable_development_kernel(profile);
         kernel_sha = kernel.is_null() ? std::string{} : kernel.at("sha256").get<std::string>();
 
@@ -397,11 +405,7 @@ struct Candidate {
                          "-prop",
                          "qemu.voyemu.token=" + token};
 
-        if (signed_system) {
-            std::erase(cmd.arguments, "-writable-system");
-        }
-
-        watch_verified_boot = profile_signed_preparation(profile);
+        watch_verified_boot = !stock_vbmeta_digest.empty();
         const auto trace = android_boot_trace_arguments(std::getenv("VOYEMU_ANDROID_BOOT_TRACE"));
 
         if (watch_verified_boot && trace.empty()) {
@@ -674,15 +678,42 @@ getprop qemu.voyemu.token
     }
 
     void writable() {
-        need(!signed_system, "read-only signed candidate system cannot be remounted");
         root_adbd();
         const auto result = adbd({"remount"});
 
         if (std::regex_search(result, std::regex("reboot", std::regex::icase))) {
-            reboot();
+            if (stock_vbmeta_digest.empty()) {
+                reboot();
+            } else {
+                bind_verified_boot();
+            }
+
             root_adbd();
             adbd({"remount"});
         }
+    }
+
+    // The first remount disables the dm-verity hashtree in the top vbmeta and so changes the
+    // vbmeta digest; the guest boots again only with boot parameters that declare the new one.
+    void bind_verified_boot() {
+        stop();
+        const auto overlay = machine / "system.img.qcow2", raw = stage / "vbmeta-system.img";
+        need(std::filesystem::is_regular_file(std::filesystem::symlink_status(overlay)),
+             "remounted system overlay missing");
+        std::filesystem::remove(raw);
+        host(qemu_img, {"convert", "-f", "qcow2", "-O", "raw", overlay.string(), raw.string()},
+             600000);
+        const auto chain = android_vbmeta_chain(raw_disk_reader(raw), vbmeta_partitions);
+        std::filesystem::remove(raw);
+        const auto parameters = machine / "base/VerifiedBootParams.textproto";
+        std::filesystem::remove(parameters);
+        write(parameters,
+              android_verified_boot_parameters(stock_boot_parameters, stock_vbmeta_digest, chain));
+        vbmeta_digest = chain.digest;
+        events.push_back({{"phase", "verified-boot-parameters"},
+                          {"vbmeta_digest", chain.digest},
+                          {"vbmeta_flags", chain.flags}});
+        boot(boot_profile);
     }
 
     void stop() {
@@ -748,6 +779,13 @@ std::pair<Json, Json> data_install_phases(const Json &entries);
 void install_entries(Candidate &c, const Json &entries, const Json &artifacts,
                      const std::filesystem::path &aapt2, std::vector<Installed> &installed,
                      progress::Meter *meter = nullptr);
+// Installs the donated Native Bridge files and enables it in the property files of the base.
+void install_native_bridge(Candidate &c, const NativeBridge &bridge,
+                           std::vector<Installed> &installed);
+// Whether every donated file of the guest has its pinned bytes, checked with one shell command.
+bool native_bridge_files_pinned(Candidate &c, const NativeBridge &bridge);
+// Records the cold checks of the donated files and of each property that enables the bridge.
+void verify_cold_native_bridge(Candidate &c, const NativeBridge &bridge, Json &checks);
 std::string home_component(Candidate &c, const Json &config, bool establish);
 // Guest mode, owner and label of one path in the form of android_candidate_file_metadata.
 std::string guest_file_metadata(Candidate &c, const std::string &path);

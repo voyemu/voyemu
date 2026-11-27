@@ -25,7 +25,6 @@
 | `voyemu` или `voyemu.exe` | Лаунчер: CLI, супервизор, окно и графический обработчик |
 | `profiles/` | Все профили ревизии лаунчера |
 | `notices/` | Лицензия Voyemu, сторонние лицензии и `dependencies.lock.json` |
-| `libexec/voyemu/avd/` | Инструменты подписанного образа Android и их пины, в архиве для Linux |
 | `README.md`, `CHANGELOG.md`, `SECURITY.md`, их русские версии и `LICENSE` | Тексты корня проекта |
 
 Оригиналы и образы, полученные из них, в релиз никогда не входят.
@@ -52,7 +51,7 @@ cmake --install .local/build/native --component Runtime --prefix "$PWD/.local/bu
 src/dev/release/archive.sh 1.0.0-beta1 linux-x64 .local/build/stage .local/build/release
 ```
 
-Компонент установки CMake `Runtime` содержит лаунчер, `notices/`, графику окна из `profiles/common/` и, в Linux, `libexec/voyemu/avd/`. Рабочий процесс релиза передаёт инструменты Linux в артефакте сборки. `archive.sh VERSION HOST STAGE OUTPUT` берёт из него лаунчер, лицензии и инструменты хоста, добавляет отслеживаемые файлы `profiles/` и тексты корня и записывает архив хоста `HOST` с файлом `.sha256` в `OUTPUT`. Записи отсортированы, у каталогов и исполняемых файлов режим 755, у остальных файлов 644, владелец и группа 0, а время каждой записи — 00:00 UTC даты `VOYEMU_RELEASE_DATE` из коммита HEAD или `SOURCE_DATE_EPOCH`, если он задан, поэтому повторный запуск даёт те же байты. Скрипт работает на Linux с git, GNU tar и xz. Для zip под Windows нужен инструмент `jar` закреплённого JDK, путь к которому задаёт `JAR`. Тест CTest `release_archive` дважды собирает архивы Linux и Windows, сравнивает их, проверяет состав и запускает распакованный лаунчер Linux без `src/`.
+Компонент установки CMake `Runtime` содержит лаунчер, `notices/` и графику окна из `profiles/common/`. `archive.sh VERSION HOST STAGE OUTPUT` берёт из него лаунчер и `notices/`, добавляет отслеживаемые файлы `profiles/` и тексты корня и записывает архив хоста `HOST` с файлом `.sha256` в `OUTPUT`. Записи отсортированы, у каталогов режим 755, у файлов 644, у лаунчера 755, владелец и группа 0, а время каждой записи — 00:00 UTC даты `VOYEMU_RELEASE_DATE` из коммита HEAD или `SOURCE_DATE_EPOCH`, если он задан, поэтому повторный запуск даёт те же байты. Скрипт работает на Linux с git, GNU tar и xz; для zip под Windows нужен инструмент `jar` закреплённого JDK, путь к которому задаёт `JAR`. Тест CTest `release_archive` дважды собирает архивы Linux и Windows, сравнивает их, проверяет состав и запускает распакованный лаунчер Linux без `src/`.
 
 ## Homebrew
 

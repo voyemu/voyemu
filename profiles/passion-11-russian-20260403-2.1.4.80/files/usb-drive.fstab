@@ -1,0 +1,1 @@
+/devices/*/usb*  auto  auto      defaults voldmanaged=usbotg:auto

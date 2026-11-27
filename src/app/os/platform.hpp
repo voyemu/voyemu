@@ -77,9 +77,6 @@ inline constexpr bool host_windows = platform_name == "Windows";
 inline constexpr std::string_view build_tools_host = host_windows               ? "windowsBuild"
                                                      : platform_name == "macOS" ? "macosBuild"
                                                                                 : "linuxBuild";
-// Whether this host builds a signed Android system offline: the image tools of that preparation
-// run only on Linux until the launcher takes them over.
-inline constexpr bool host_signed_android_preparation = platform_name == "Linux";
 // The separator of the entries of a path list such as PATH or a Java class path.
 inline constexpr char path_list_separator = host_windows ? ';' : ':';
 } // namespace voyemu::os

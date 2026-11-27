@@ -26,7 +26,6 @@ class Voyemu < Formula
 
   def install
     libexec.install "voyemu", "profiles"
-    libexec.install "libexec" if OS.linux?
     pkgshare.install "notices"
     # The launcher finds its installation root from its own location: var/voyemu holds the launcher
     # beside profiles/, and .local/ and machines/ there outlive upgrades of the keg.
@@ -41,13 +40,6 @@ class Voyemu < Formula
     remove "voyemu/.update", base: :var, recursive: true
     copy "profiles", "voyemu/.update/profiles", source_base: :libexec, target_base: :var, recursive: true
     copy "voyemu", "voyemu/.update/voyemu", source_base: :libexec, target_base: :var
-    if OS.linux?
-      copy "libexec", "voyemu/.update/libexec", source_base: :libexec, target_base: :var, recursive: true
-      if_path_exists "voyemu/libexec", base: :var do
-        move "voyemu/libexec", "voyemu/.update/previous-libexec", source_base: :var, target_base: :var
-      end
-      move "voyemu/.update/libexec", "voyemu/libexec", source_base: :var, target_base: :var
-    end
     if_path_exists "voyemu/profiles", base: :var do
       move "voyemu/profiles", "voyemu/.update/previous-profiles", source_base: :var, target_base: :var
     end

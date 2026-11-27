@@ -2,6 +2,7 @@
 #include "machine_preparation_internal.hpp"
 #include "ordinary_path.hpp"
 #include "ui_observer_diagnostics.hpp"
+#include <cstdio>
 
 // Drives a booted Android candidate: installs files and packages, configures and wakes its
 // displays.
@@ -139,6 +140,60 @@ Installed install_apk(Candidate &c, const Json &entry, const Json &artifact,
     return {entry.at("artifact").get<std::string>(), target, sha, name, {}, false};
 }
 
+// The ELF class and machine of the libraries of an APK ABI, and its instruction set directory.
+struct NativeAbi {
+    unsigned elf_class, machine;
+    std::string isa;
+};
+
+NativeAbi native_abi(std::string_view abi) {
+    if (abi == "x86_64") {
+        return {2, 62, "x86_64"};
+    }
+
+    if (abi == "x86") {
+        return {1, 3, "x86"};
+    }
+
+    return {2, 183, "arm64"};
+}
+
+void install_system_native_library(Candidate &c, const Json &entry,
+                                   const std::filesystem::path &source, const std::string &sha,
+                                   const ZipEntry &file, const NativeAbi &elf,
+                                   const std::string &folder, std::vector<Installed> &installed) {
+    const auto bytes = read_pinned_zip_entry(source, sha, file.name, 64U << 20,
+                                             ZipNamePolicy::exact);
+
+    need(bytes.size() == file.bytes && bytes.size() >= 20 &&
+                 bytes.substr(0, 4) == std::string("\x7f"
+                                                   "ELF",
+                                                   4) &&
+                 static_cast<unsigned char>(bytes[4]) == elf.elf_class &&
+                 static_cast<unsigned char>(bytes[5]) == 1 &&
+                 static_cast<unsigned char>(bytes[18]) == elf.machine && bytes[19] == 0,
+         "native APK entry must be an ELF of its ABI: " + file.name);
+    const auto pin = sha256_bytes(bytes),
+               target = folder + std::filesystem::path(file.name).filename().generic_string();
+    c.shell({"test", "!", "-e", target});
+    const auto unpacked = c.stage / "apk-native" / (pin + ".so");
+
+    if (!std::filesystem::exists(unpacked)) {
+        ensure_private_directory(unpacked.parent_path());
+        std::ofstream output(unpacked, std::ios::binary);
+        output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        output.close();
+        need(bool(output), "native APK entry write failed");
+    } else {
+        check_file(unpacked, pin);
+    }
+
+    installed.push_back(install_file(
+            c,
+            {{"artifact", "native:" + entry.at("artifact").get<std::string>()}, {"mode", "0644"}},
+            unpacked, pin, target));
+}
+
 void install_system_native_libraries(Candidate &c, const Json &entry, const Json &artifact,
                                      const std::filesystem::path &aapt2,
                                      std::vector<Installed> &installed) {
@@ -146,65 +201,40 @@ void install_system_native_libraries(Candidate &c, const Json &entry, const Json
     const auto sha = artifact.at("sha256").get<std::string>();
     const auto inventory = pinned_zip_inventory(source, sha, ZipNamePolicy::exact);
 
-    if (std::none_of(inventory.begin(), inventory.end(), [](const auto &e) {
-            return !e.directory && e.name.starts_with("lib/arm64-v8a/");
-        })) {
-        return;
-    }
-
-    const auto manifest =
-            c.host(aapt2, {"dump", "xmltree", "--file", "AndroidManifest.xml", source.string()})
-                    .output;
-    const auto selected = android_candidate_system_native_libraries(entry, inventory, manifest);
-
-    if (selected.empty()) {
-        return;
-    }
-
-    const auto parent = std::filesystem::path(entry.at("target").get<std::string>())
-                                .parent_path()
-                                .generic_string();
-
-    for (const auto &folder : {parent + "/lib", parent + "/lib/arm64"}) {
-        c.shell({"test", "!", "-L", folder});
-        c.shell({"mkdir", "-p", folder});
-        c.shell({"chmod", "0755", folder});
-        c.shell({"chown", "0:0", folder});
-        c.shell({"restorecon", folder});
-    }
-
-    for (const auto &file : selected) {
-        const auto bytes = read_pinned_zip_entry(source, sha, file.name, 64U << 20,
-                                                 ZipNamePolicy::exact);
-        need(bytes.size() == file.bytes && bytes.size() >= 20 &&
-                     bytes.substr(0, 4) == std::string("\x7f"
-                                                       "ELF",
-                                                       4) &&
-                     static_cast<unsigned char>(bytes[4]) == 2 &&
-                     static_cast<unsigned char>(bytes[5]) == 1 &&
-                     static_cast<unsigned char>(bytes[18]) == 183 && bytes[19] == 0,
-             "native APK entry must be ELF64 AArch64");
-        const auto pin = sha256_bytes(bytes),
-                   target = parent + "/lib/arm64/" +
-                            std::filesystem::path(file.name).filename().generic_string();
-        c.shell({"test", "!", "-e", target});
-        const auto unpacked = c.stage / "apk-native" / (pin + ".so");
-
-        if (!std::filesystem::exists(unpacked)) {
-            ensure_private_directory(unpacked.parent_path());
-            std::ofstream output(unpacked, std::ios::binary);
-            output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-            output.close();
-            need(bool(output), "native APK entry write failed");
-        } else {
-            check_file(unpacked, pin);
+    for (const auto &abi : android_guest_native_abis(android_guest_abi(c.boot_profile))) {
+        if (std::none_of(inventory.begin(), inventory.end(), [&](const auto &e) {
+                return !e.directory && e.name.starts_with("lib/" + abi + "/");
+            })) {
+            continue;
         }
 
-        installed.push_back(
-                install_file(c,
-                             {{"artifact", "native:" + entry.at("artifact").get<std::string>()},
-                              {"mode", "0644"}},
-                             unpacked, pin, target));
+        const auto manifest =
+                c.host(aapt2, {"dump", "xmltree", "--file", "AndroidManifest.xml", source.string()})
+                        .output;
+        const auto selected = android_candidate_system_native_libraries(entry, inventory, manifest,
+                                                                        abi);
+
+        if (selected.empty()) {
+            continue;
+        }
+
+        const auto elf = native_abi(abi);
+        const auto parent = std::filesystem::path(entry.at("target").get<std::string>())
+                                    .parent_path()
+                                    .generic_string();
+
+        for (const auto &folder : {parent + "/lib", parent + "/lib/" + elf.isa}) {
+            c.shell({"test", "!", "-L", folder});
+            c.shell({"mkdir", "-p", folder});
+            c.shell({"chmod", "0755", folder});
+            c.shell({"chown", "0:0", folder});
+            c.shell({"restorecon", folder});
+        }
+
+        for (const auto &file : selected) {
+            install_system_native_library(c, entry, source, sha, file, elf,
+                                          parent + "/lib/" + elf.isa + "/", installed);
+        }
     }
 }
 
@@ -747,6 +777,77 @@ std::pair<Json, Json> data_install_phases(const Json &entries) {
     return {immutable, mutable_seeds};
 }
 
+namespace {
+// The ELF machine of the bytes of an ELF header, or 0 for another file.
+unsigned elf_machine(std::string_view header) {
+    if (header.size() < 20 || header.substr(0, 4) != std::string_view("\x7f"
+                                                                      "ELF",
+                                                                      4)) {
+        return 0;
+    }
+
+    return static_cast<unsigned char>(header[18]) |
+           static_cast<unsigned>(static_cast<unsigned char>(header[19])) << 8;
+}
+
+unsigned guest_elf_machine(std::string_view abi) {
+    return abi == "x86_64" ? 62 : 183;
+}
+
+// The ELF machine of a guest file, or 0 when it is absent or another file.
+unsigned guest_file_elf_machine(Candidate &c, const std::string &target) {
+    const auto bytes =
+            c.shell({"sh", "-c", "[ ! -f \"$1\" ] || od -A n -t u1 -N 20 \"$1\"", "sh", target});
+    std::istringstream values(bytes);
+    std::string header;
+
+    for (unsigned value = 0; values >> value;) {
+        need(value < 256 && header.size() < 20, "guest ELF header read differs");
+        header += static_cast<char>(value);
+    }
+
+    return elf_machine(header);
+}
+
+// A file whose source is ELF code of another instruction set than the guest leaves the guest file
+// of the same path in place when that one is ELF code of the guest, such as a vendor shell of an
+// x86_64 base; the replacement could not run before the Native Bridge starts.
+bool keeps_guest_elf(Candidate &c, const std::filesystem::path &source, const std::string &target) {
+    std::ifstream input(source, std::ios::binary);
+    std::string header(20, '\0');
+
+    input.read(header.data(), static_cast<std::streamsize>(header.size()));
+    header.resize(static_cast<std::size_t>(input.gcount()));
+    const auto guest = guest_elf_machine(android_guest_abi(c.boot_profile));
+    const auto machine = elf_machine(header);
+
+    if (!machine || machine == guest || guest_file_elf_machine(c, target) != guest) {
+        return false;
+    }
+
+    c.events.push_back(
+            {{"phase", "guest-elf-kept"}, {"target", target}, {"source_machine", machine}});
+
+    return true;
+}
+
+// A line merge adds each line of the source that the guest file lacks, after its last line.
+std::filesystem::path merged_lines(Candidate &c, const Json &entry,
+                                   const std::filesystem::path &source) {
+    need(entry.at("merge") == "lines", "registered install merge required");
+    const auto target = entry.at("target").get<std::string>();
+    const auto pulled = c.stage / ("merge-" + random_token());
+    c.adbd({"pull", target, pulled.string()});
+    const auto merged = android_candidate_merged_lines(text(pulled, 1U << 20),
+                                                       text(source, 1U << 20));
+    std::filesystem::remove(pulled);
+    const auto output = c.stage / ("merged-" + random_token());
+    write(output, merged);
+
+    return output;
+}
+} // namespace
+
 void install_entries(Candidate &c, const Json &entries, const Json &artifacts,
                      const std::filesystem::path &aapt2, std::vector<Installed> &installed,
                      progress::Meter *meter) {
@@ -783,9 +884,17 @@ void install_entries(Candidate &c, const Json &entries, const Json &artifacts,
         } else if (entry.at("type") == "directory") {
             installed.push_back(install_directory(c, entry));
         } else if (entry.at("type") == "file") {
-            installed.push_back(install_file(c, entry, artifact.at("file").get<std::string>(),
-                                             artifact.at("sha256").get<std::string>(),
-                                             entry.at("target").get<std::string>()));
+            const std::filesystem::path source = artifact.at("file").get<std::string>();
+            const auto target = entry.at("target").get<std::string>();
+
+            if (entry.contains("merge")) {
+                check_file(source, artifact.at("sha256").get<std::string>());
+                const auto merged = merged_lines(c, entry, source);
+                installed.push_back(install_file(c, entry, merged, sha256_file(merged), target));
+            } else if (!keeps_guest_elf(c, source, target)) {
+                installed.push_back(install_file(c, entry, source,
+                                                 artifact.at("sha256").get<std::string>(), target));
+            }
 
             if (entry.at("target").get<std::string>().ends_with(".apk")) {
                 install_system_native_libraries(c, entry, artifact, aapt2, installed);
@@ -802,6 +911,138 @@ void install_entries(Candidate &c, const Json &entries, const Json &artifacts,
 
         if (meter) {
             meter->advance(bytes);
+        }
+    }
+}
+
+void install_native_bridge(Candidate &c, const NativeBridge &bridge,
+                           std::vector<Installed> &installed) {
+    const auto receipt = verify_native_bridge(bridge);
+    const auto &files = bridge.descriptor.at("files");
+    std::vector<std::string> present = {
+            "sh", "-c", "for f in \"$@\"; do [ ! -e \"$f\" ] || echo \"$f\"; done", "sh"};
+    std::set<std::string> folders;
+
+    for (const auto &[target, pin] : files.items()) {
+        (void)pin;
+        present.push_back(target);
+
+        for (auto folder = std::filesystem::path(target).parent_path();
+             folder.generic_string().size() > std::string_view("/system").size();
+             folder = folder.parent_path()) {
+            folders.insert(folder.generic_string());
+        }
+    }
+
+    need(c.shell(present, 60000).empty(), "Native Bridge files already present in the base");
+    std::vector<std::string> existing = {
+            "sh", "-c", "for f in \"$@\"; do [ ! -d \"$f\" ] || echo \"$f\"; done", "sh"};
+    existing.insert(existing.end(), folders.begin(), folders.end());
+    const auto kept = lines(c.shell(existing, 60000));
+
+    // Folders sort before their contents; each new one gets the owner and mode of system folders.
+    for (const auto &folder : folders) {
+        if (std::find(kept.begin(), kept.end(), folder) == kept.end()) {
+            c.shell({"mkdir", folder});
+            c.shell({"chmod", "0755", folder});
+            c.shell({"chown", "0:0", folder});
+            c.shell({"restorecon", folder});
+        }
+    }
+
+    // The donated files take their mode and owner from the donor image and their labels from
+    // the file contexts of the guest; the shell steps run once for all of them.
+    std::map<std::string, std::vector<std::string>> modes, owners;
+    std::vector<std::string> targets;
+
+    for (const auto &[target, pin] : files.items()) {
+        const auto &inode = receipt.at("files").at(target);
+        const auto source = bridge.directory / target.substr(1);
+        check_file(source, pin.get<std::string>(), 256ULL << 20);
+        c.adbd({"push", source.string(), target}, 180000);
+        char mode[8];
+        std::snprintf(mode, sizeof mode, "0%03o", inode.at("mode").get<unsigned>() & 0777U);
+        modes[mode].push_back(target);
+        owners[std::to_string(inode.at("uid").get<unsigned>()) + ":" +
+               std::to_string(inode.at("gid").get<unsigned>())]
+                .push_back(target);
+        targets.push_back(target);
+    }
+
+    for (const auto &[command, groups] :
+         {std::pair{"chmod", &modes}, std::pair{"chown", &owners}}) {
+        for (const auto &[value, paths] : *groups) {
+            std::vector<std::string> arguments = {command, value};
+            arguments.insert(arguments.end(), paths.begin(), paths.end());
+            c.shell(arguments, 60000);
+        }
+    }
+
+    std::vector<std::string> label = {"restorecon"};
+    label.insert(label.end(), targets.begin(), targets.end());
+    c.shell(label, 60000);
+    need(native_bridge_files_pinned(c, bridge), "installed Native Bridge files differ from pins");
+
+    for (const auto &[target, file] : bridge.descriptor.at("propertyFiles").items()) {
+        const auto pulled = c.stage / ("native-bridge-" + random_token() + ".prop");
+        c.adbd({"pull", target, pulled.string()});
+        need(sha256_file(pulled) == file.at("inputSha256").get<std::string>(),
+             "base property file differs from the Native Bridge pin: " + target);
+        const auto merged = merge_android_properties(text(pulled), file.at("values"));
+        need(sha256_bytes(merged) == file.at("outputSha256").get<std::string>(),
+             "merged Native Bridge property file differs from its pin: " + target);
+        const auto output = c.stage / ("native-bridge-" + random_token() + ".merged");
+        write(output, merged);
+        std::istringstream fields(c.shell({"stat", "-c", "%a %u %g", target}));
+        std::vector<std::string> owner(3);
+        need(bool(fields >> owner[0] >> owner[1] >> owner[2]),
+             "guest property file owner required: " + target);
+        installed.push_back(install_file(c,
+                                         {{"artifact", "native-bridge"},
+                                          {"mode", "0" + owner[0]},
+                                          {"uid", std::stoul(owner[1])},
+                                          {"gid", std::stoul(owner[2])}},
+                                         output, sha256_bytes(merged), target));
+    }
+
+    c.events.push_back({{"phase", "native-bridge"},
+                        {"files", files.size()},
+                        {"property_files", bridge.descriptor.at("propertyFiles").size()}});
+}
+
+bool native_bridge_files_pinned(Candidate &c, const NativeBridge &bridge) {
+    std::vector<std::string> sums = {"sha256sum"};
+    const auto &files = bridge.descriptor.at("files");
+
+    for (const auto &[target, pin] : files.items()) {
+        (void)pin;
+        sums.push_back(target);
+    }
+
+    std::size_t matched = 0;
+
+    for (const auto &line : lines(c.shell(sums, 120000))) {
+        const auto space = line.find("  ");
+
+        if (space != std::string::npos && files.contains(line.substr(space + 2)) &&
+            files.at(line.substr(space + 2)) == line.substr(0, space)) {
+            ++matched;
+        }
+    }
+
+    return matched == files.size();
+}
+
+void verify_cold_native_bridge(Candidate &c, const NativeBridge &bridge, Json &checks) {
+    record_cold_check(checks, "native-bridge-files",
+                      native_bridge_files_pinned(c, bridge) ? "pinned" : "differ", "pinned");
+
+    for (const auto &[target, file] : bridge.descriptor.at("propertyFiles").items()) {
+        (void)target;
+
+        for (const auto &[key, value] : file.at("values").items()) {
+            record_cold_check(checks, "native-bridge-property:" + key, c.shell({"getprop", key}),
+                              value.get<std::string>());
         }
     }
 }
@@ -1036,6 +1277,9 @@ void configure_boot_properties(Candidate &c, const Json &profile,
         const auto modified = android_candidate_boot_properties(text(pulled), boot);
         const auto target = c.stage / "oem-build.prop";
         write(target, modified);
+        std::erase_if(installed, [](const Installed &file) {
+            return file.target == "/system/build.prop";
+        });
         installed.push_back(install_file(c, {{"artifact", "oem-boot-properties"}, {"mode", "0644"}},
                                          target, sha256_file(target), "/system/build.prop"));
     }

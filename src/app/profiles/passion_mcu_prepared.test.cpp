@@ -1,5 +1,5 @@
 #include "passion_mcu_prepared.hpp"
-#include "passion_signed_guest.test.hpp"
+#include "passion_x86_guest.test.hpp"
 #include <cassert>
 #include <exception>
 #include <fstream>
@@ -252,42 +252,43 @@ int main() try {
 
     auto x86_definition = definition;
     auto x86_candidate = candidate;
-    test::use_signed_x86_guest(x86_definition, x86_candidate);
+    test::use_x86_guest(x86_definition, x86_candidate);
     x86_candidate["mcu_property"] = passion_mcu_contract(x86_definition, x86_candidate, apk,
                                                          candidate.at("mcu_property").at("helper"));
-    const auto signed_images = x86_candidate.at("android").at("images");
-    assert(validate_passion_mcu_candidate(x86_definition, x86_candidate, signed_images, profile) ==
+    const auto x86_images = x86_candidate.at("android").at("images");
+    assert(validate_passion_mcu_candidate(x86_definition, x86_candidate, x86_images, profile) ==
            passion_mcu_capability());
 
-    auto unsigned_candidate = x86_candidate;
-    unsigned_candidate.erase("signed_android");
+    // The guest of a base that binds a vbmeta digest needs the cold check of that digest.
+    auto unbound_candidate = x86_candidate;
+    unbound_candidate["android"].erase("verified_boot");
     rejects([&] {
-        validate_passion_mcu_candidate(x86_definition, unsigned_candidate, signed_images, profile);
+        validate_passion_mcu_candidate(x86_definition, unbound_candidate, x86_images, profile);
+    });
+    auto other_digest = x86_candidate;
+    other_digest["checks"].back()["actual"] = std::string(64, '7');
+    rejects([&] {
+        validate_passion_mcu_candidate(x86_definition, other_digest, x86_images, profile);
     });
     auto wrong_abi = x86_candidate;
     wrong_abi["android"]["abi"] = "arm64-v8a";
     rejects([&] {
-        validate_passion_mcu_candidate(x86_definition, wrong_abi, signed_images, profile);
+        validate_passion_mcu_candidate(x86_definition, wrong_abi, x86_images, profile);
     });
     auto wrong_base = x86_definition;
     wrong_base["android"]["package"] = "system-images;android-29;default;x86_64";
     rejects([&] {
-        validate_passion_mcu_candidate(wrong_base, x86_candidate, signed_images, profile);
+        validate_passion_mcu_candidate(wrong_base, x86_candidate, x86_images, profile);
     });
-    auto absent_verity = x86_candidate;
-    absent_verity["checks"].erase(absent_verity["checks"].end() - 1);
+    auto absent_check = x86_candidate;
+    absent_check["checks"].erase(absent_check["checks"].end() - 1);
     rejects([&] {
-        validate_passion_mcu_candidate(x86_definition, absent_verity, signed_images, profile);
+        validate_passion_mcu_candidate(x86_definition, absent_check, x86_images, profile);
     });
     auto extra_check = x86_candidate;
     extra_check["checks"].push_back(extra_check["checks"].back());
     rejects([&] {
-        validate_passion_mcu_candidate(x86_definition, extra_check, signed_images, profile);
-    });
-    auto wrong_image = x86_candidate;
-    wrong_image["signed_android"]["files"]["vendor.img"]["sha256"] = std::string(64, '9');
-    rejects([&] {
-        validate_passion_mcu_candidate(x86_definition, wrong_image, signed_images, profile);
+        validate_passion_mcu_candidate(x86_definition, extra_check, x86_images, profile);
     });
 
     auto old = definition;
