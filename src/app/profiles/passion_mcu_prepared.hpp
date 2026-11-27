@@ -225,7 +225,7 @@ inline Json export_passion_mcu(const Json &definition, const Json &candidate,
     passion_mcu_need(!std::filesystem::exists(file) && !std::filesystem::is_symlink(file),
                      "fresh evidence destination required");
     ensure_private_directory(file.parent_path());
-    write_private_json(file, candidate);
+    write_private_json(file, candidate, 1 << 20);
     passion_mcu_need(std::filesystem::file_size(file) <= 1ULL << 20,
                      "bounded evidence metadata required");
 

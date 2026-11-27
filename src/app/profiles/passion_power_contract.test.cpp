@@ -277,6 +277,12 @@ int main() try {
            "b8d882888bd7575d78db9797a9b8f81e1897f786b0687d59ac79dffb40eba558");
     assert(validate_passion_power_candidate(composed, current, images, std::string(64, 'c')) ==
            media::PassionPowerOwner::capability());
+    // The machine keeps cold evidence beyond 128 KiB up to the 1 MiB that start reads.
+    auto large = current;
+    large["events"] = Json::array({std::string(200 * 1024, 'e')});
+    assert(export_passion_power(composed, large, root / "large-evidence", std::string(64, 'c'))
+                   .at("bytes")
+                   .get<std::uint64_t>() > 128 * 1024);
     rejects([&] {
         validate_passion_power_candidate(definition, current, images, std::string(64, 'c'));
     });

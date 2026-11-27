@@ -167,6 +167,12 @@ int main() try {
                                   {"bytes", std::uint64_t{25}}});
     assert(validate_passion_mcu_candidate(definition, candidate, images, profile) ==
            passion_mcu_capability());
+    // The machine keeps cold evidence beyond 128 KiB up to the 1 MiB that start reads.
+    auto large = candidate;
+    large["events"] = Json::array({std::string(200 * 1024, 'e')});
+    assert(export_passion_mcu(definition, large, work / "large-evidence", profile)
+                   .at("bytes")
+                   .get<std::uint64_t>() > 128 * 1024);
 
     for (int mode = 0; mode < 17; mode++) {
         auto bad = candidate;

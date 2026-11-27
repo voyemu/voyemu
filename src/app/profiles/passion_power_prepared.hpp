@@ -293,7 +293,7 @@ inline Json export_passion_power(const Json &definition, const Json &candidate,
     power_need(!std::filesystem::exists(file) && !std::filesystem::is_symlink(file),
                "fresh cold evidence file required");
     ensure_private_directory(file.parent_path());
-    write_private_json(file, candidate);
+    write_private_json(file, candidate, 1 << 20);
     power_need(std::filesystem::file_size(file) <= 1ULL << 20, "bounded cold evidence required");
 
     return {{"schema", 1},
